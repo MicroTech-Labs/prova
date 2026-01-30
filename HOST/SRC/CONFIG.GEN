@@ -1,4 +1,0 @@
-; CONFIG.GEN
-; first to be included, cannot contain code/data
-
-PUT_FG	equ	0
