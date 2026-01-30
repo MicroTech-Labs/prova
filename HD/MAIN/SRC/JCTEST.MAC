@@ -1,0 +1,892 @@
+
+;	MSX-C ver 1.20p   (code generator)
+
+	cseg
+?16:
+	defb	3
+?17:
+	defb	0
+?18:
+	defb	0
+?19:
+	defb	0
+?20:
+	defw	?59999
+?59999:
+	defb	74,67,46,82,88,0
+	dseg
+?21:	defs	1
+?22:	defs	2
+?24:	defs	160
+	cseg
+FK1@:
+	defw	?59998
+?59998:
+	defb	201,0,0
+FK2@:
+	defw	?59997
+?59997:
+	defb	202,0,0
+FK3@:
+	defw	?59996
+?59996:
+	defb	203,0,0
+FK4@:
+	defw	?59995
+?59995:
+	defb	204,0,0
+FK5@:
+	defw	?59994
+?59994:
+	defb	205,0,0
+FK6@:
+	defw	?59993
+?59993:
+	defb	206,0,0
+	dseg
+?26:	defs	4097
+?28:	defs	2
+	cseg
+?29:
+	defb	0
+	dseg
+?32:	defs	2
+?33:	defs	2
+?34:	defs	2
+?35:	defs	2
+	cseg
+?59992:
+	defb	80,97,114,97,109,32,37,100,32,110
+	defb	111,116,32,97,110,32,97,114,103,10
+	defb	0
+?59991:
+	defb	80,97,114,97,109,32,37,100,32,116
+	defb	111,111,32,115,104,111,114,116,10,0
+?59990:
+	defb	97,114,103,117,109,101,110,116,115,58
+	defb	10,0
+?59989:
+	defb	45,115,58,32,48,32,61,32,50,52
+	defb	48,48,44,32,49,32,61,32,52,56
+	defb	48,48,44,32,50,32,61,32,57,54
+	defb	48,48,44,32,51,32,61,32,49,57
+	defb	50,48,48,10,0
+?59988:
+	defb	45,112,58,32,48,32,61,32,112,111
+	defb	114,116,32,65,44,32,49,32,61,32
+	defb	112,111,114,116,32,66,10,0
+?59987:
+	defb	45,99,58,32,48,32,61,32,110,111
+	defb	32,102,108,111,119,32,99,111,110,116
+	defb	114,111,108,44,32,49,32,61,32,82
+	defb	84,83,47,67,84,83,10,0
+?59986:
+	defb	45,116,58,32,82,69,83,69,82,86
+	defb	69,68,44,32,68,79,32,78,79,84
+	defb	32,85,83,69,10,0
+
+GetArg:
+	ld	(?32),hl
+	ex	de,hl
+	ld	(?34),hl
+	ld	hl,1
+	ld	(?33),hl
+@9:
+	ld	hl,(?32)
+	ex	de,hl
+	ld	hl,(?33)
+	call	?CPSHD
+	jp	nc,@0
+	ld	hl,(?33)
+	add	hl,hl
+	ex	de,hl
+	ld	hl,(?34)
+	add	hl,de
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	ld	(?35),hl
+	ld	hl,(?35)
+	ld	a,(hl)
+	inc	hl
+	ld	(?35),hl
+	cp	45
+	jp	z,@1
+	ld	hl,(?33)
+	push	hl
+	ld	bc,?59992
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	jp	@2
+@1:
+	ld	hl,(?35)
+	ld	a,(hl)
+	inc	hl
+	ld	(?35),hl
+	or	a
+	jp	z,@3
+	cp	115
+	jp	z,@4
+	cp	112
+	jp	z,@5
+	cp	116
+	jp	z,@6
+	cp	99
+	jp	z,@7
+	jp	@8
+@3:
+	ld	hl,(?33)
+	push	hl
+	ld	bc,?59991
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	jp	@2
+@4:
+	ld	hl,(?35)
+	ld	a,(hl)
+	and	15
+	ld	(?16),a
+	jp	@2
+@5:
+	ld	hl,(?35)
+	ld	a,(hl)
+	and	15
+	ld	(?17),a
+	jp	@2
+@6:
+	ld	hl,(?35)
+	ld	a,(hl)
+	and	15
+	ld	(?18),a
+	jp	@2
+@7:
+	ld	hl,(?35)
+	ld	a,(hl)
+	and	15
+	ld	(?19),a
+	jp	@2
+@8:
+	ld	bc,?59990
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	bc,?59989
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	bc,?59988
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	bc,?59987
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	bc,?59986
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	a,255
+	ret
+@2:
+	ld	hl,(?33)
+	inc	hl
+	ld	(?33),hl
+	jp	@9
+@0:
+	xor	a
+	ret
+
+?59985:
+	defb	117,110,115,117,112,112,111,114,116,101
+	defb	100,32,116,32,111,112,116,105,111,110
+	defb	32,37,117,10,0
+?59984:
+	defb	117,110,115,117,112,112,111,114,116,101
+	defb	100,32,115,32,111,112,116,105,111,110
+	defb	32,37,117,10,0
+?59983:
+	defb	117,110,115,117,112,112,111,114,116,101
+	defb	100,32,112,32,111,112,116,105,111,110
+	defb	32,37,117,10,0
+?59982:
+	defb	117,110,115,117,112,112,111,114,116,101
+	defb	100,32,99,32,111,112,116,105,111,110
+	defb	32,37,117,10,0
+
+CheckA:
+	ld	a,(?18)
+	cp	2
+	jp	c,@10
+	ld	a,(?18)
+	ld	c,a
+	push	bc
+	ld	bc,?59985
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	ld	a,255
+	ret
+@10:
+	ld	a,(?16)
+	cp	4
+	jp	c,@11
+	ld	a,(?16)
+	ld	c,a
+	push	bc
+	ld	bc,?59984
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	ld	a,255
+	ret
+@11:
+	ld	a,(?17)
+	cp	2
+	jp	c,@12
+	ld	a,(?17)
+	ld	c,a
+	push	bc
+	ld	bc,?59983
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	ld	a,255
+	ret
+@12:
+	ld	a,(?19)
+	cp	9
+	jp	c,@13
+	ld	a,(?19)
+	ld	c,a
+	push	bc
+	ld	bc,?59982
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	ld	a,255
+	ret
+@13:
+	xor	a
+	ret
+
+
+jcLoop:
+	ld	hl,(?22)
+	ex	de,hl
+	ld	hl,(64670)
+	ld	a,e
+	cp	l
+	jr	nz,$+4
+	ld	a,d
+	cp	h
+	ret	z
+	call	JCKBD@
+	ld	hl,(64670)
+	ld	(?22),hl
+	xor	a
+	ld	(62454),a
+	ret
+
+	dseg
+?54:	defs	2
+?55:	defs	2
+?56:	defs	1
+	cseg
+?59981:
+	defb	48,120,37,48,50,120,32,0
+?59980:
+	defb	37,99,0
+
+show@:
+	ld	(?54),hl
+	ex	de,hl
+	ld	(?55),hl
+	ld	hl,(?55)
+	ld	a,l
+	or	h
+	ret	z
+@17:
+	ld	hl,(?55)
+	dec	hl
+	ld	(?55),hl
+	inc	hl
+	ld	a,l
+	or	h
+	jp	z,@14
+	ld	hl,(?54)
+	ld	a,(hl)
+	inc	hl
+	ld	(?54),hl
+	ld	(?56),a
+	ld	a,(?29)
+	or	a
+	jp	z,@15
+	ld	a,(?56)
+	ld	c,a
+	ld	b,0
+	push	bc
+	ld	bc,?59981
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	jp	@16
+@15:
+	ld	a,(?56)
+	ld	c,a
+	ld	b,0
+	push	bc
+	ld	bc,?59980
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+@16:
+	call	jcLoop
+	jp	@17
+@14:
+	ld	hl,@iob@+12
+	call	fflush
+	ret
+
+	dseg
+?63:	defs	2
+?64:	defs	1
+?65:	defs	1
+?66:	defs	1
+?67:	defs	1
+?68:	defs	2
+?69:	defs	2
+?70:	defs	2
+?71:	defs	2
+?72:	defs	2
+?73:	defs	2
+?74:	defs	2
+?75:	defs	2
+	cseg
+?59979:
+	defb	88,88,0
+?59978:
+	defb	85,78,69,88,80,69,67,84,69,68
+	defb	32,115,61,48,120,37,48,50,120,32
+	defb	99,112,76,101,110,61,37,117,10,0
+?59977:
+	defb	82,84,83,32,79,78,10,0
+?59976:
+	defb	82,84,83,32,79,70,70,10,0
+?59975:
+	defb	68,84,82,32,79,78,10,0
+?59974:
+	defb	68,84,82,32,79,70,70,10,0
+?59973:
+	defb	67,84,83,32,37,115,10,0
+?59972:
+	defb	79,78,0
+?59971:
+	defb	79,70,70,0
+?59970:
+	defb	68,83,82,32,37,115,10,0
+?59969:
+	defb	79,78,0
+?59968:
+	defb	79,70,70,0
+
+test@:
+	ld	(?63),hl
+	xor	a
+	ld	(?28+1),a
+	ld	c,2
+	ld	e,60
+	ld	hl,(?63)
+	call	jcRxTO
+	ld	e,0
+	ld	hl,(?63)
+	call	jcKSTO
+	ld	hl,0
+	ld	(?74),hl
+	ld	hl,0
+	ld	(?75),hl
+@27:
+	ld	a,1
+	ld	(?65),a
+@22:
+	ld	a,(?65)
+	or	a
+	jp	z,@18
+	ld	hl,(?75)
+	ld	a,l
+	or	h
+	jp	z,@19
+	ld	hl,(?63)
+	call	jcLock
+	ld	(?73),hl
+	ld	hl,(?75)
+	ex	de,hl
+	ld	hl,(?74)
+	call	z0TxNS
+	ld	de,4096
+	ld	hl,?26
+	call	z0Rx@
+	ld	(?67),a
+	ld	hl,(?73)
+	call	jcUnlo
+	ld	hl,0
+	ld	(?75),hl
+	ld	hl,0
+	ld	(?74),hl
+	jp	@20
+@19:
+	ld	hl,(?63)
+	call	jcLock
+	ld	(?73),hl
+	ld	de,4096
+	ld	hl,?26
+	call	z0Rx@
+	ld	(?67),a
+	ld	hl,(?73)
+	call	jcUnlo
+@20:
+	ld	hl,(?63)
+	call	jcRxMi
+	ld	de,4096
+	ld	a,e
+	sub	l
+	ld	l,a
+	ld	a,d
+	sbc	a,h
+	ld	h,a
+	ld	(?68),hl
+	ld	a,(?67)
+	cp	2
+	jp	nz,@21
+	ld	hl,(?68)
+	ex	de,hl
+	ld	hl,?26
+	call	show@
+	ld	bc,?59979
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	hl,@iob@+12
+	call	fflush
+	jp	@22
+@21:
+	ld	a,(?67)
+	dec	a
+	jp	nz,@23
+	ld	hl,(?68)
+	ld	a,l
+	or	h
+	jp	nz,@23
+	ld	a,1
+	ret
+@23:
+	ld	a,(?67)
+	dec	a
+	jp	z,@24
+	ld	a,(?67)
+	or	a
+	jp	nz,@25
+@24:
+	ld	hl,(?68)
+	ex	de,hl
+	ld	hl,?26
+	call	show@
+	jp	@22
+@25:
+	ld	a,(?67)
+	cp	5
+	jp	nz,@26
+	call	JCKBD@
+	ld	hl,(?68)
+	ex	de,hl
+	ld	hl,?26
+	call	show@
+	xor	a
+	ld	(?65),a
+	jp	@22
+@26:
+	ld	hl,(?68)
+	push	hl
+	ld	a,(?67)
+	ld	c,a
+	ld	b,0
+	push	bc
+	ld	bc,?59978
+	push	bc
+	ld	hl,3
+	call	printf
+	pop	bc
+	pop	bc
+	pop	bc
+	jp	@22
+@18:
+	ld	a,1
+	ld	(?66),a
+@37:
+	ld	a,(?66)
+	or	a
+	jp	z,@27
+	call	kbhit@
+	or	a
+	jp	z,@28
+	call	getch@
+	ld	(?64),a
+	ld	a,(?64)
+	cp	27
+	jp	z,@29
+	cp	201
+	jp	z,@30
+	cp	202
+	jp	z,@31
+	cp	203
+	jp	z,@32
+	cp	204
+	jp	z,@33
+	cp	205
+	jp	z,@34
+	cp	206
+	jp	z,@35
+	jp	@36
+@29:
+	ld	a,4
+	ret
+@30:
+	ld	bc,?59977
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	e,1
+	ld	hl,(?63)
+	call	jcRTS@
+	ld	e,32
+	ld	hl,(?63)
+	call	jcKSTO
+	xor	a
+	ld	(?66),a
+	jp	@37
+@31:
+	ld	bc,?59976
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	e,0
+	ld	hl,(?63)
+	call	jcRTS@
+	ld	e,32
+	ld	hl,(?63)
+	call	jcKSTO
+	xor	a
+	ld	(?66),a
+	jp	@37
+@32:
+	ld	bc,?59975
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	e,1
+	ld	hl,(?63)
+	call	jcDTR@
+	ld	e,32
+	ld	hl,(?63)
+	call	jcKSTO
+	xor	a
+	ld	(?66),a
+	jp	@37
+@33:
+	ld	bc,?59974
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	e,0
+	ld	hl,(?63)
+	call	jcDTR@
+	ld	e,32
+	ld	hl,(?63)
+	call	jcKSTO
+	xor	a
+	ld	(?66),a
+	jp	@37
+@34:
+	ld	hl,(?63)
+	call	jcCTS@
+	or	a
+	jp	z,@38
+	ld	hl,?59972
+	jp	@39
+@38:
+	ld	hl,?59971
+@39:
+	push	hl
+	ld	bc,?59973
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	ld	hl,(?63)
+	call	jcDSR@
+	or	a
+	jp	z,@40
+	ld	hl,?59969
+	jp	@41
+@40:
+	ld	hl,?59968
+@41:
+	push	hl
+	ld	bc,?59970
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	ld	e,0
+	ld	hl,(?63)
+	call	jcKSTO
+	xor	a
+	ld	(?66),a
+	jp	@37
+@35:
+	ld	a,(?29)
+	or	a
+	jp	nz,@42
+	ld	a,1
+	jp	@43
+@42:
+	xor	a
+@43:
+	ld	(?29),a
+	ld	e,32
+	ld	hl,(?63)
+	call	jcKSTO
+	xor	a
+	ld	(?66),a
+	jp	@37
+@36:
+	ld	a,(?64)
+	ld	(?28),a
+	ld	e,32
+	ld	hl,(?63)
+	call	jcKSTO
+	xor	a
+	ld	(?66),a
+	ld	hl,?28
+	ld	(?74),hl
+	ld	hl,1
+	ld	(?75),hl
+	jp	@37
+@28:
+	call	jcLoop
+	call	kbhit@
+	or	a
+	jp	nz,@37
+	call	KEYPRE
+	or	a
+	jp	nz,@37
+	ld	e,0
+	ld	hl,(?63)
+	call	jcKSTO
+	xor	a
+	ld	(?66),a
+	jp	@37
+
+	dseg
+?108:	defs	1
+?109:	defs	2
+?110:	defs	4
+?111:	defs	1
+?112:	defs	1
+	cseg
+?59967:
+	defb	74,67,32,100,114,105,118,101,114,32
+	defb	37,115,10,0
+?59966:
+	defb	106,99,116,101,115,116,32,48,46,48
+	defb	46,51,10,0
+?59965:
+	defb	116,101,115,116,32,61,32,48,120,37
+	defb	48,50,120,10,0
+
+main@:
+	push	hl
+	push	de
+	call	?saut2
+	call	jcVer@
+	push	hl
+	ld	bc,?59967
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	pop	de
+	push	de
+	call	?laut2
+	pop	de
+	call	GetArg
+	or	a
+	jp	z,@44
+	ld	a,255
+	jp	@45
+@44:
+	call	CheckA
+	or	a
+	jp	z,@46
+	ld	a,255
+	jp	@45
+@46:
+	ld	a,(62454)
+	ld	(?21),a
+	ld	hl,(64670)
+	ld	(?22),hl
+	xor	a
+	ld	(62454),a
+	ld	de,4
+	ld	hl,?110
+	call	bzero@
+	ld	a,(?17)
+	ld	(?110),a
+	ld	a,(?16)
+	ld	(?110+1),a
+	ld	a,(?18)
+	ld	(?110+2),a
+	ld	a,(?19)
+	ld	(?110+3),a
+	ld	hl,?110
+	call	jcInit
+	ld	(?109),hl
+	ld	hl,(?109)
+	ld	a,l
+	or	h
+	jp	nz,@47
+	ld	a,(?21)
+	ld	(62454),a
+	ld	a,255
+	jp	@45
+@47:
+	ld	bc,?59966
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	bc,160
+	ld	de,63615
+	ld	hl,?24
+	call	opldir
+	ld	hl,(FK1@)
+	ex	de,hl
+	ld	hl,63615
+	call	strcpy
+	ld	hl,(FK2@)
+	ex	de,hl
+	ld	hl,63631
+	call	strcpy
+	ld	hl,(FK3@)
+	ex	de,hl
+	ld	hl,63647
+	call	strcpy
+	ld	hl,(FK4@)
+	ex	de,hl
+	ld	hl,63663
+	call	strcpy
+	ld	hl,(FK5@)
+	ex	de,hl
+	ld	hl,63679
+	call	strcpy
+	ld	hl,(?109)
+	call	test@
+	ld	(?112),a
+	ld	a,(?112)
+	ld	c,a
+	ld	b,0
+	push	bc
+	ld	bc,?59965
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	ld	bc,160
+	ld	de,?24
+	ld	hl,63615
+	call	opldir
+	ld	hl,(?109)
+	call	jcDel@
+	ld	a,1
+	ld	(62454),a
+	xor	a
+@45:
+	pop	bc
+	ret
+
+
+	public	FK1@
+	public	FK2@
+	public	FK3@
+	public	FK4@
+	public	FK5@
+	public	FK6@
+	public	GetArg
+	extrn	printf
+	extrn	?CPSHD
+	public	CheckA
+	public	jcLoop
+	extrn	JCKBD@
+	public	show@
+	extrn	fflush
+	extrn	@iob@
+	public	test@
+	extrn	jcRxTO
+	extrn	jcKSTO
+	extrn	jcLock
+	extrn	z0TxNS
+	extrn	z0Rx@
+	extrn	jcUnlo
+	extrn	jcRxMi
+	extrn	kbhit@
+	extrn	getch@
+	extrn	jcRTS@
+	extrn	jcDTR@
+	extrn	jcCTS@
+	extrn	jcDSR@
+	extrn	KEYPRE
+	public	main@
+	extrn	jcVer@
+	extrn	bzero@
+	extrn	jcInit
+	extrn	opldir
+	extrn	strcpy
+	extrn	jcDel@
+	extrn	?saut2
+	extrn	?laut2
+
+	end
+

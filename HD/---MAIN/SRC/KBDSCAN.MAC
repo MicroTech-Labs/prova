@@ -1,0 +1,1617 @@
+; Faking stuff for M80 and MX
+module	macro
+	endm
+endmodule macro
+	endm
+extrn	macro
+	endm
+; ---
+
+;    TITLE ( MSX ROM BASIC BIOS )
+;    PAGE 36
+        .list
+
+        INCLUDE INTS.INC
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;                           ;
+;       Port definition     ;
+;                           ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;       VDP address definition
+;
+VDP.DRW EQU     10011000B       ;98H    Read/write data VDP
+VDP.CW  EQU     10011001B       ;99H    write command to VDP
+VDP.SR  EQU     10011001B       ;99H    read status from VDP
+;
+V.COLR  EQU     7               ;In text mode, foreground and background color
+                                ;Otherwise background color
+;
+;       PSG address definition
+;
+PSG.LW  EQU     10100000B       ;A0H    latch address for PSG
+PSG.DW  EQU     10100001B       ;A1H    write data to PSG
+PSG.DR  EQU     10100010B       ;A2H    read data from PSG
+;
+PSG.PA  EQU     14              ;Port A of PSG
+PSG.PB  EQU     15              ;Port B of PSG
+
+;
+;       PPI address definition
+;
+PPI.AR  EQU     10101000B       ;A8H    read from PPI Port A
+PPI.BR  EQU     10101001B       ;A9H    read from PPI Port B
+PPI.CR  EQU     10101010B       ;AAH    read from PPI Port C
+PPI.AW  EQU     10101000B       ;A8H    Write to PPI Port A
+PPI.CW  EQU     10101010B       ;AAH    write to PPI Port C
+PPI.CM  EQU     10101011B       ;ABH    write to PPI command register
+
+; extern void JCKBD();
+JCKBD@::
+
+        INT_DISABLE
+
+;
+; Scan keyboard
+;
+        XOR     A               ;Enable first key click
+        LD      (CLIKFL),A
+        CALL    KEYCHK          ;Detect valid key transition and check buffer
+        JR      NZ,INTRET       ;Some characters still remain, don't repeat
+        LD      HL,REPCNT
+        DEC     (HL)            ;Need to enter repeat mode
+        JR      NZ,INTRET       ;No
+        LD      (HL),1          ;Set short time repeat
+        LD      HL,OLDKEY       ;Clear OLDKEY status
+        LD      DE,OLDKEY+1
+        LD      BC,0AH
+        LD      (HL),0FFH
+        LDIR
+        CALL    KEYCK4          ;Check if currently pressed key is valid
+INTRET:
+
+        INT_ENABLE
+
+        RET
+
+; extern BOOL KEYPRESS();
+KEYPRESS@::
+; OUT A = 0 (FALSE) no key pressed
+;     A = 1 (TRUE) a key is pressed
+
+        INT_DISABLE
+
+        IN      A,(PPI.CR)      ;Get what is currently output to Port C
+        AND     0F0H            ;Leave higher 4 bits unaffected
+        LD      C,A
+        LD      B,0BH
+KEYP0:
+        LD      A,C
+        OUT     (PPI.CW),A      ;Select row
+        IN      A,(PPI.BR)      ;Get column information of selected raw
+        inc a
+        jp nz,KEY1
+        INC     C               ;Select next raw
+        DJNZ    KEYP0           ;Loop until all rows are sensed
+
+        INT_ENABLE        
+        xor a           ; FALSE
+        ret
+KEY1:
+        INT_ENABLE
+        ld a,1          ; TRUE        
+        ret
+
+KEYCHK:
+;
+        IN      A,(PPI.CR)      ;Get what is currently output to Port C
+        AND     0F0H            ;Leave higher 4 bits unaffected
+        LD      C,A
+        LD      B,0BH
+        LD      HL,NEWKEY       ;Move current key status to NEWKEY
+KEYCK1:
+        LD      A,C
+        OUT     (PPI.CW),A      ;Select row
+        IN      A,(PPI.BR)      ;Get column information of selected raw
+        LD      (HL),A          ;Move it
+        INC     C               ;Select next raw
+        INC     HL
+        DJNZ    KEYCK1          ;Loop until all rows are sensed
+
+;;;NOSTOP:
+;
+        LD      DE,NEWKEY       ;[OLDKEY] + 11
+        LD      B,0BH
+KEYCK2:
+        DEC     DE
+        DEC     HL
+        LD      A,(DE)          ;Get OLDKEY status
+        CP      (HL)            ;Compare with NEWKEY status
+        JR      NZ,KEYCK3       ;Changed, set long repeat interval
+        DJNZ    KEYCK2
+        JR      KEYCK4          ;No change
+KEYCK3:
+;
+        LD      A,0DH
+        LD      (REPCNT),A
+KEYCK4:
+        LD      B,0BH           ;Set number of rows
+        LD      HL,OLDKEY
+        LD      DE,NEWKEY
+KEYCK5:
+        LD      A,(DE)          ;Get current key status
+        LD      C,A
+        XOR     (HL)            ;See if any bit changed
+        AND     (HL)            ;See if this change is negative transition
+        LD      (HL),C          ;Update old status
+        CALL    NZ,KEYANY       ;Active transition, go find it
+        INC     DE
+        INC     HL
+        DJNZ    KEYCK5
+CHKBUF:
+;
+; Check if buffer is empty or not
+;
+        LD      HL,(GETPNT)     ;Load GETPNT
+        LD      A,(PUTPNT)      ;Load lower 8 bit of PUTPNT
+        SUB     L               ;Check if same
+        RET
+
+;CHSNS:
+;;
+;        EI                      ;Make sure interrupts are enabled
+;        PUSH    HL              ; Save environments
+;        PUSH    DE
+;        PUSH    BC
+;        CALL    CHKSCR          ;Are we in text mode?
+;        JR      NC,CHSNS1       ;No, do not flip function keys
+;        LD      A,(FNKSWI)      ;Get current shift status
+;        LD      HL,SFTKEY       ;Get current function key display
+;        XOR     (HL)            ;Are they different
+;        LD      HL,CNSDFG       ;Function key displayed at all?
+;        AND     (HL)
+;        RRCA
+;        CALL    C,DSPFNK        ;Update display
+;CHSNS1:
+;        CALL    CHKBUF
+;        POP     BC              ;Restore environments
+;        POP     DE
+;        POP     HL
+;        RET
+
+KEYANY:
+;
+; [[[ SUBROUTINE 'KEYANY' ]]]
+;
+        PUSH    HL              ;Save environments
+        PUSH    DE
+        PUSH    BC
+        PUSH    AF              ;Save pressed bit
+        LD      A,0BH
+        SUB     B               ;Calculate base code
+        ADD     A,A
+        ADD     A,A
+        ADD     A,A
+        LD      C,A
+        LD      B,8             ;Set up counter for 8 bit
+        POP     AF              ;Restore pressed bit
+KYANY1:
+        RRA
+        PUSH    BC
+        PUSH    AF
+        CALL    C,KEYCOD        ;If pressed bit, call key coder.
+        POP     AF
+        POP     BC
+        INC     C               ;Try next code
+        DJNZ    KYANY1          ;Loop until all bits are checked
+        JP      PBDHRT          ;Restore environments
+;
+; [[[ SUBROUTINE 'KEYCOD' ]]
+;
+; Return key-code in buffer if valid
+;
+KYJTAB:
+        DB      10
+        DW      KYNUM           ;0..9
+        DB      22
+        DW      KYCOD1
+        DB      48
+        DW      KYALP           ;A..Z
+        DB      51
+        DW      KYEASY
+        DB      52
+        DW      KYLOCK          ;Capital lock
+        DB      53
+        DW      KYKLOK          ;Kana lock
+        DB      58
+        DW      KYFUNC          ;Function key
+        DB      60
+        DW      KYEASY
+        DB      61
+        DW      KYSTOP          ;Stop key
+        DB      65
+        DW      KYEASY
+        DB      66
+        DW      KYCLS           ;CLS/HOME key
+        DB      255
+        DW      KYEASY
+;
+NMSFTB:
+        DB      255
+        DB      "'"
+        DB      34              ;Double quote
+        DB      "#$%&'()"
+
+;
+ALPJMP:
+        DW      PUTCHR          ;CTRL+shift
+        DW      PUTCHR          ;CTRL
+        DW      KEYSFT          ;   SHIFT
+        DW      KEYNOM          ;
+;
+KYC1TB:
+        DW      KY1SFC-10       ;CTRL+SHIFT
+        DW      KY1CNT-10       ;CTRL
+        DW      KY1SFT-10       ;   SHIFT
+        DW      KY1NOM-10       ;
+KY1NOM:
+        DB      "-^\@[;:],./"
+
+
+        DB      255
+KY1SFT:
+        DB      "=~`{+*}"
+
+        DB      00111100B       ;Less than sign
+        DB      00111110B       ;Greater than sign
+        DB      "?_"
+KY1CNT:
+        DB      "-"
+        DB      "^"-"@"
+        DB      "\"-"@"
+        DB      "@"-"@"
+        DB      "["-"@"
+        DB      ";:"
+        DB      "]"-"@"
+        DB      ",./"
+        DB      255
+KY1SFC:
+        DB      "="
+        DB      "^"-"@"
+        DB      "\"-"@"
+        DB      "@"-"@"
+        DB      "["-"@"
+        DB      "+*"
+        DB      "]"-"@"
+        DB      00111100B       ;Less than sign
+        DB      00111110B       ;Greater than sign
+        DB      "?"
+        DB      "_"-"@"
+;
+EASYTB:
+        DB      0               ;Shift      (48)
+        DB      0               ;Control    (49)
+        DB      0               ;Graph      (50)
+        DB      0               ;Cap lock   (51)
+        DB      0               ;Kana lock  (52)
+        DB      0               ;F1         (53)
+        DB      0               ;F2         (54)
+        DB      0               ;F3         (55)
+        DB      0               ;F4         (56)
+        DB      0               ;F5         (57)
+        DB      27              ;Escape     (58)
+        DB      9               ;Tab        (59)
+        DB      0               ;Stop       (60)
+        DB      8               ;Back space (61)
+        DB      "X"-"@"         ;Select     (62)
+        DB      13              ;Enter      (63)
+        DB      32              ;Space      (64)
+        DB      12              ;Clear      (65)
+        DB      "R"-"@"         ;Insert     (66)
+        DB      127             ;Rubout     (67)
+        DB      29              ;Left       (68)
+        DB      30              ;Up         (69)
+        DB      31              ;Down       (70)
+        DB      28              ;Right      (71)
+;
+;   For additional key matrix
+;
+        DB      "A"-"@"         ;           (72)
+        DB      "D"-"@"         ;           (73)
+        DB      "O"-"@"         ;           (74)
+        DB      "P"-"@"         ;           (75)
+        DB      "Q"-"@"         ;           (76)
+        DB      "R"-"@"         ;           (77)
+        DB      "S"-"@"         ;           (78)
+        DB      "T"-"@"         ;           (79)
+        DB      0               ;           (80)
+        DB      0               ;           (81)
+        DB      0               ;           (82)
+        DB      0               ;           (83)
+        DB      0               ;           (84)
+        DB      0               ;           (85)
+        DB      0               ;           (86)
+        DB      0               ;           (87)
+
+;
+KEYCOD:
+;
+; [[[ SUBROUTINE 'KEYCOD' ]]]
+;
+; Return key-code in buffer if valid
+;
+        LD      A,C             ;Get raw code
+        CP      0FFH            ;Just for fail safe
+        RET     Z
+        LD      HL,KYJTAB
+        CALL    H.KEYC
+        CP      48              ;Possibly a KANA or graphic character
+        JR      NC,KYCLAS       ;No
+        LD      A,(SFTKEY)      ;Get shift key status
+        RRCA                    ;Control pressed?
+        RRCA
+        JR      NC,KYCLA0       ;Yes, this supersedes everything
+        RRCA                    ;How about graphic shift
+        JP      NC,KYGRAP       ;Yes, this has the 2nd priority
+        LD      A,(KANAST)      ;KANA lock active
+        AND     A
+        JP      NZ,KYKANA       ;Yes
+KYCLA0:
+        LD      A,C
+KYCLAS:
+        CP      (HL)            ;Compare range
+        INC     HL
+        LD      E,(HL)          ;Get jump address in [DE]
+        INC     HL
+        LD      D,(HL)
+        INC     HL
+        PUSH    DE              ;Assume matched
+        RET     C               ;Good assumption
+        POP     DE              ;Discard stack
+        JR      KYCLAS          ;Check next possibility
+KYNUM:
+;
+        ADD     A,'0'           ;Assume no shift
+        LD      B,A             ;Save code
+        LD      A,(SFTKEY)      ;Check shift status
+        RRCA
+        LD      A,B             ;Restore code
+        JR      C,JPUTCH        ;Good assumption
+        LD      B,0
+        LD      HL,NMSFTB
+        ADD     HL,BC           ;This must not be 'DADF'
+        LD      A,(HL)          ;Get code for shift-number
+        CP      0FFH            ;Shift '0'?
+        RET     Z               ;Yes, ignore this
+JPUTCH:
+        JP      PUTCHR          ;Put this in buffer
+KYALP:
+;
+        LD      A,(SFTKEY)
+        AND     3
+        ADD     A,A
+        LD      E,A
+        LD      D,0
+        LD      HL,ALPJMP
+        ADD     HL,DE
+        LD      A,(HL)          ;Get jump address
+        INC     HL
+        LD      H,(HL)
+        LD      L,A
+        LD      A,C             ;Get code
+        SUB     15H             ;Make it a control character (1 - 26)
+        JP      (HL)
+KEYSFT:
+;
+        ADD     A,' '
+KEYNOM:
+        LD      B,A             ;Save code
+        LD      A,(CAPST)
+        CPL
+        AND     00100000B       ;Bit 5 is on if CAP lock not active
+        XOR     B
+        ADD     A,01000000B
+        JR      JPUTCH
+KYCOD1:
+;
+        LD      HL,KYC1TB
+        LD      A,(SFTKEY)
+        AND     3               ;Extract shift and control status
+        ADD     A,A
+        LD      E,A
+        LD      D,0
+        ADD     HL,DE
+        LD      A,(HL)
+        INC     HL
+        LD      H,(HL)
+        LD      L,A
+        LD      E,C
+        ADD     HL,DE
+        LD      A,(HL)
+        CP      0FFH            ;Should generate some code?
+        JP      NZ,PUTCHR       ;Yes
+        RET                     ;No code should be generated
+KYFUNC:
+;
+; Function keys
+;
+        LD      A,(SFTKEY)      ;Is shift pressed?
+        RRCA
+        JR      C,KYFNC1        ;No
+        LD      A,C
+        ADD     A,5
+        LD      C,A
+KYFNC1:
+        LD      E,C             ;[DE] is (56..65)
+        LD      D,0
+        LD      HL,FNKFLG-53    ;Check if this function key is an event device
+        ADD     HL,DE
+        LD      A,(HL)
+        AND     A
+        JR      NZ,FNKINT       ;Request trap if not in direct mode
+KYFNC2:
+        EX      DE,HL
+        ADD HL,HL
+        ADD HL,HL
+        ADD HL,HL
+        ADD     HL,HL
+        LD      DE,FNKSTR-53*16
+        ADD     HL,DE           ;Get function key string address
+        EX      DE,HL           ;Move address to DE
+KYFNC3:
+        LD      A,(DE)          ;Get from function key string
+        AND     A               ;End of string
+        RET     Z               ;Yes
+        CALL    PUTCHR          ;Put this character in buffer
+        INC     DE              ;Check next character
+        JR      KYFNC3
+FNKINT:
+;
+        LD      HL,(CURLIN)     ;Are we in direct mode (CURLIN=65535)
+        INC     HL
+        LD      A,H
+        OR      L
+        JR      Z,KYFNC2        ;Yes, treat as normal function key
+        LD      HL,TRPTBL-53*3
+        ADD     HL,DE
+        ADD     HL,DE
+        ADD     HL,DE
+
+
+
+KYCLS:
+        LD      A,(SFTKEY)      ;Set carry if shift not pressed
+        RRCA
+        LD      A,0CH           ;Load code for CLS
+        SBC     A,0             ;Change to HOME if shift not pressed
+        JR      PUTCHR
+KYEASY:
+;
+; Easily converted keys
+;
+        CALL    H.KYEA          ;For CCP (Cut, copy, paste) editor rom
+        LD      E,A             ;These character are simply taken from table
+        LD      D,0
+        LD      HL,EASYTB-48
+        ADD     HL,DE
+        LD      A,(HL)
+        AND     A               ;Should this key generate some code
+        RET     Z               ;No
+        JR      PUTCHR          ;Yes
+KYKLOK:
+;
+; Kana lock key
+;
+        LD      HL,KANAST
+        LD      A,(HL)
+        CPL
+        LD      (HL),A
+        LD      A,0FH
+        OUT     (PSG.LW),A
+        IN      A,(PSG.DR)
+        AND     7FH
+        LD      B,A
+        LD      A,(HL)
+        CPL
+        AND     80H
+        OR      B
+        OUT     (PSG.DW),A
+NOKEY:
+        RET
+KYLOCK:
+;
+; Capital lock key
+;
+        LD      HL,CAPST
+        LD      A,(HL)          ;Toggle capital status
+        CPL
+        LD      (HL),A          ;Update capital status
+        CPL
+CHGCAP:
+        AND     A
+        LD      A,0CH           ;Assume 'turn off'
+        JR      Z,CGCAP1        ;Good assumption
+        INC     A               ;Change to 'turn on'
+CGCAP1:
+        OUT     (PPI.CM),A
+        RET
+KYSTOP:
+;
+; STOP key
+;
+        LD      A,(SFTKEY)
+        RRCA                    ;Move CTRL status to carry
+        RRCA
+        LD      A,3             ;Assume CTRL pressed also
+        JR      NC,KYSTP1       ;Good assumption
+        INC     A               ;CTRL not pressed, just treat as pause
+KYSTP1:
+        LD      (INTFLG),A
+        JR      C,GENCLK        ;Only generate click if pause
+PUTCHR:
+;
+; Put one character in key buffer.
+;
+        LD      HL,(PUTPNT)     ;Load PUTPNT in [HL]
+        LD      (HL),A          ;Save the character to buffer
+        CALL    UPDATE          ;Increment PUTPNT
+        LD      A,(GETPNT)      ;Load lower 8bit of GETPNT
+        CP      L               ;Compare it with new PUTPNT
+        RET     Z               ;If same skip next step
+        LD      (PUTPNT),HL     ;Save HL in PUTPNT
+GENCLK:
+        LD      A,(CLIKSW)      ;Key click enabled?
+        AND     A
+        RET     Z               ;No
+        LD      A,(CLIKFL)      ;Already generated?
+        AND     A
+        RET     NZ              ;Yes, don't click any more
+        LD      A,0FH
+        LD      (CLIKFL),A      ;Set flag to disable more clicks
+        OUT     (PPI.CM),A
+        LD      A,0AH
+CLICKW:
+        DEC     A
+        JR      NZ,CLICKW
+CHGSND:
+        AND     A
+        LD      A,0EH           ;Assume 'turn off'
+        JR      Z,CGSND1        ;Good assumption
+        INC     A               ;Change to 'turn on'
+CGSND1:
+        OUT     (PPI.CM),A
+        RET
+KYKANA:
+;
+; KANA key pressed while KANA lock is active
+;
+        LD      A,(KANAMD)      ;JIS or AIUEO?
+        AND     A               ;Affect Z flag
+        LD      A,(SFTKEY)      ;Check shift key
+        RRCA                    ;Affect Carry flag
+        JR      Z,KAIUEO        ;AIUEO order
+        LD      HL,KANJNO
+        JR      C,KYKAN1
+        LD      HL,KANJSF
+        JR      KYKAN1
+KAIUEO:
+;
+        LD      HL,KANANO       ;Assume shift not pressed
+        JR      C,KYKAN1        ;Good assumption
+        LD      HL,KANASF
+KYKAN1:
+        LD      B,0
+        ADD     HL,BC
+        LD      BC,PUTCHR       ;Push jump address
+        PUSH    BC
+        LD      A,(CAPST)       ;Capital lock (katakana) active?
+        AND     A
+        LD      A,(HL)
+        RET     NZ              ;active
+        CP      165+1           ;Special characters?
+        RET     C               ;Yes, no conversion necessary
+        CP      0B0H
+        RET     Z
+        CP      0DEH
+        RET     NC
+        SUB     ' '             ;Assume first half
+        CP      191-32+1        ;Really first half
+        RET     C               ;Good assumption
+        ADD     A,32+32         ;Compensate
+        RET
+KANANO:
+;   Kana table (AIUEO order, un-shifted
+;
+        DB      0C9H,0B1H,0B2H,0B3H,0B4H,0B5H,005H
+
+        DB      0C6H,0C7H,0C8H,0D7H,0D8H,0D9H,0DAH
+
+        DB      0DBH,0D3H,0DEH,0DFH,0D6H,0DCH,0A6H
+
+        DB      0DDH,0BBH,0C4H,0C2H,0BDH,0B8H,0BEH
+
+        DB      0BFH,0CFH,0CCH,0D0H,0D1H,0D2H,0D5H
+
+        DB      0D4H,0CDH,0CEH,0B6H,0B9H,0BCH,0BAH
+
+        DB      0CBH,0C3H,0B7H,0C1H,0CAH,0C0H
+
+KANASF:
+;   Shifted
+;
+        DB      0C9H,0A7H,0A8H,0A9H,0AAH,0ABH,005H
+
+        DB      0C6H,0C7H,0C8H,0D7H,0D8H,0D9H,0DAH
+
+        DB      0A2H,0D3H,0B0H,0A3H,0AEH,0A4H,0A1H
+
+        DB      0A5H,0BBH,0C4H,0AFH,0BDH,0B8H,0BEH
+
+        DB      0BFH,0CFH,0CCH,0D0H,0D1H,0D2H,0ADH
+
+        DB      0ACH,0CDH,0CEH,0B6H,0B9H,0BCH,0BAH
+
+        DB      0CBH,0C3H,0B7H,0C1H,0CAH,0C0H
+
+KANJNO:
+;   Kana table JIS order, un-shifted
+;
+        DB      0DCH,0C7H,0CCH,0B1H,0B3H,0B4H,0B5H
+
+        DB      0D4H,0D5H,0D6H,0CEH,0CDH,0B0H,0DEH
+
+        DB      0DFH,0DAH,0B9H,0D1H,0C8H,0D9H,0D2H
+
+        DB      0DBH,0C1H,0BAH,0BFH,0BCH,0B2H,0CAH
+
+        DB      0B7H,0B8H,0C6H,0CFH,0C9H,0D8H,0D3H
+
+        DB      0D0H,0D7H,0BEH,0C0H,0BDH,0C4H,0B6H
+
+        DB      0C5H,0CBH,0C3H,0BBH,0DDH,0C2H
+
+KANJSF:
+;   Shifted
+;
+        DB      0A6H,0C7H,0CCH,0A7H,0A9H,0AAH,0ABH
+
+        DB      0ACH,0ADH,0AEH,0CEH,0CDH,0B0H,0DEH
+
+        DB      0A2H,0DAH,0B9H,0A3H,0A4H,0A1H,0A5H
+
+        DB      0DBH,0C1H,0BAH,0BFH,0BCH,0A8H,0CAH
+
+        DB      0B7H,0B8H,0C6H,0CFH,0C9H,0D8H,0D3H
+
+        DB      0D0H,0D7H,0BEH,0C0H,0BDH,0C4H,0B6H
+
+        DB      0C5H,0CBH,0C3H,0BBH,0DDH,0AFH
+
+
+;
+KYGRAP:
+;
+; Graphic characters
+;
+        LD      B,0
+        LD      HL,GRPTAB
+        ADD     HL,BC
+        LD      A,(HL)          ;Get from graphic key table
+        AND     A               ;Should generate some code
+        RET     Z               ;No
+        CP      80H             ;1 byte code?
+        PUSH    AF
+        LD      A,1             ;Assume not
+        CALL    C,PUTCHR        ;Was 2 byte code, put header byte
+        POP     AF
+        JP      PUTCHR
+;
+GRPTAB:
+        DB      4FH,47H,41H,42H,43H,44H,45H
+
+        DB      46H,4DH,4EH,57H,00H,49H,00H
+
+        DB      84H,82H,81H,85H,5FH,5DH,80H
+
+        DB      83H,00H,5BH,5AH,54H,58H,55H
+
+        DB      53H,4AH,56H,00H,00H,5EH,4BH
+
+        DB      00H,00H,50H,00H,52H,4CH,59H
+
+        DB      00H,51H,00H,5CH,48H,00H
+
+;
+UPDATE:
+;
+; Update pointer
+;
+        INC     HL
+        LD      A,L
+        CP      18H             ;Check buffer boundary
+        RET     NZ
+        LD      HL,KEYBUF
+        RET
+
+;CHGET:
+;;
+;; Get one character from keyboard
+;;
+;        PUSH    HL
+;        PUSH    DE
+;        PUSH    BC
+;        CALL    H.CHGE
+;        CALL    CHSNS           ;Character already there?
+;        JR      NZ,CHGET2       ;Yes, do not touch cursor
+;        CALL    CKDPC0          ;Display cursor if disabled
+;CHGET1:
+;        CALL    CHSNS           ;Any character in buffer?
+;        JR      Z,CHGET1        ;No, wait
+;        CALL    CKERC0          ;Erase cursor if disabled
+;CHGET2:
+;        LD      HL,INTFLG
+;        LD      A,(HL)
+;        CP      4               ;Code for pause?
+;        JR      NZ,CHGET3       ;No
+;        LD      (HL),0          ;Clear this
+;CHGET3:
+;        LD      HL,(GETPNT)
+;        LD      C,(HL)          ;Save pressed key
+;        CALL    UPDATE          ;Update [GETPNT]
+;        LD      (GETPNT),HL     ;Set new [GETPNT]
+;        LD      A,C             ;Pass result to Acc
+;        JP      PBDHRT
+
+;CKCNTC:
+;;
+;; Check ctl-C
+;;
+;        PUSH    HL
+;        LD      HL,0            ;To disable CONTinuing
+;        CALL    ISCNTC
+;        POP     HL
+;        RET
+;
+GTROW8:
+;
+; Get keyboard's 8th row, bit assignments are as follows.
+;
+; RDULxxxS
+; ||||   |
+; ||||   +- space
+; |||+----- left
+; ||+------ up
+; |+------- down
+; +-------- right
+;
+        DI
+        IN      A,(PPI.CR)
+        AND     0F0H
+        ADD     A,8
+        OUT     (PPI.CW),A
+        IN      A,(PPI.BR)
+        EI
+        RET
+;
+STKTBL:
+        DB      0               ;RLBF
+        DB      5               ;RLB
+        DB      1               ;RL F
+        DB      0               ;RL
+        DB      3               ;R BF
+        DB      4               ;R B
+        DB      2               ;R F
+        DB      3               ;R
+        DB      7               ; LBF
+        DB      6               ; LB
+        DB      8               ; L F
+        DB      7               ; L
+        DB      0               ; BF
+        DB      5               ; B
+        DB      1               ;  F
+        DB      0               ;
+;
+KSTKTB:
+        DB      0               ;RBFL,
+        DB      3               ;RBF
+        DB      5               ;RB L
+        DB      4               ;RB
+        DB      1               ;R FL
+        DB      2               ;R F
+        DB      0               ;R L
+        DB      3               ;R
+        DB      7               ;  BFL
+        DB      0               ; BF
+        DB      6               ; B L
+        DB      5               ; B
+        DB      8               ; FL
+        DB      1               ; F
+        DB      7               ;  L
+        DB      0               ;
+;
+;
+RDVDP:
+;
+        IN      A,(VDP.SR)
+        RET
+RSLREG:
+;
+        IN      A,(PPI.AR)
+        RET
+WSLREG:
+;
+        OUT     (PPI.AW),A
+        RET
+SNSMAT:
+;
+        LD      C,A
+        DI
+        IN      A,(PPI.CR)      ;Get what is currently output to Port C
+        AND     0F0H            ;Leave higher 4 bits unaffected
+        ADD     A,C
+        OUT     (PPI.CW),A      ;Select row
+        IN      A,(PPI.BR)      ;Get column information of selected row
+        EI
+        RET
+
+;;;;;;;;;;;;;;;;;;
+PBDHRT:
+        POP     BC
+        POP     DE
+        POP     HL
+        RET
+
+    ;SUBTTL -MSXCHR- MSX character set
+
+CGTABL:
+        DB 00H,00H,00H,00H,00H,00H,00H
+
+        DB 00H,7EH,42H,7EH,42H,7EH,42H
+
+        DB 82H,00H,10H,92H,54H,10H,28H
+
+        DB 44H,82H,00H,12H,14H,0F8H,14H
+
+        DB 34H,52H,92H,00H,10H,10H,0FEH
+
+        DB 10H,38H,54H,92H,00H,10H,28H
+
+        DB 7CH,92H,38H,54H,0FEH,00H,10H
+
+        DB 10H,10H,7CH,10H,10H,0FEH,00H
+
+        DB 7EH,42H,42H,7EH,42H,42H,7EH
+
+        DB 00H,40H,7EH,48H,3CH,28H,7EH
+
+        DB 08H,00H,0FEH,92H,92H,0FEH,82H
+
+        DB 82H,86H,00H,04H,0EEH,0A4H,0EFH
+
+        DB 0A2H,0EAH,06H,00H,28H,44H,82H
+
+        DB 3CH,14H,24H,4CH,00H,28H,0C8H
+
+        DB 5CH,0EAH,6CH,0C8H,50H,00H,7CH
+
+        DB 20H,7CH,44H,7CH,44H,7CH,00H
+
+        DB 0CH,70H,10H,0FEH,10H,10H,10H
+
+        DB 00H,7EH,10H,1EH,12H,22H,44H
+
+        DB 08H,00H,00H,7CH,28H,28H,28H
+
+        DB 4EH,00H,00H,10H,10H,10H,0FFH
+
+        DB 00H,00H,00H,00H,00H,00H,00H
+
+        DB 0FFH,10H,10H,10H,10H,10H,10H
+
+        DB 10H,0F0H,10H,10H,10H,10H,10H
+
+        DB 10H,10H,1FH,10H,10H,10H,10H
+
+        DB 10H,10H,10H,0FFH,10H,10H,10H
+
+        DB 10H,10H,10H,10H,10H,10H,10H
+
+        DB 10H,10H,00H,00H,00H,0FFH,00H
+
+        DB 00H,00H,00H,00H,00H,00H,1FH
+
+        DB 10H,10H,10H,10H,00H,00H,00H
+
+        DB 0F0H,10H,10H,10H,10H,10H,10H
+
+        DB 10H,1FH,00H,00H,00H,00H,10H
+
+        DB 10H,10H,0F0H,00H,00H,00H,00H
+
+        DB 81H,42H,24H,18H,18H,24H,42H
+
+        DB 81H,10H,7CH,10H,10H,28H,44H
+
+        DB 82H,00H,10H,10H,0FEH,92H,0FEH
+
+        DB 10H,10H,00H,10H,10H,54H,54H
+
+        DB 92H,10H,30H,00H,00H,00H,00H
+
+        DB 00H,00H,00H,00H,00H,20H,20H
+
+        DB 20H,20H,00H,00H,20H,00H,50H
+
+        DB 50H,50H,00H,00H,00H,00H,00H
+
+        DB 50H,50H,0F8H,50H,0F8H,50H,50H
+
+        DB 00H,20H,78H,0A0H,70H,28H,0F0H
+
+        DB 20H,00H,0C0H,0C8H,10H,20H,40H
+
+        DB 98H,18H,00H,40H,0A0H,40H,0A8H
+
+        DB 90H,98H,60H,00H,10H,20H,40H
+
+        DB 00H,00H,00H,00H,00H,10H,20H
+
+        DB 40H,40H,40H,20H,10H,00H,40H
+
+        DB 20H,10H,10H,10H,20H,40H,00H
+
+        DB 20H,0A8H,70H,20H,70H,0A8H,20H
+
+        DB 00H,00H,20H,20H,0F8H,20H,20H
+
+        DB 00H,00H,00H,00H,00H,00H,00H
+
+        DB 20H,20H,40H,00H,00H,00H,78H
+
+        DB 00H,00H,00H,00H,00H,00H,00H
+
+        DB 00H,00H,60H,60H,00H,00H,00H
+
+        DB 08H,10H,20H,40H,80H,00H,70H
+
+        DB 88H,98H,0A8H,0C8H,88H,70H,00H
+
+        DB 20H,60H,0A0H,20H,20H,20H,0F8H
+
+        DB 00H,70H,88H,08H,10H,60H,80H
+
+        DB 0F8H,00H,70H,88H,08H,30H,08H
+
+        DB 88H,70H,00H,10H,30H,50H,90H
+
+        DB 0F8H,10H,10H,00H,0F8H,80H,0E0H
+
+        DB 10H,08H,10H,0E0H,00H,30H,40H
+
+        DB 80H,0F0H,88H,88H,70H,00H,0F8H
+
+        DB 88H,10H,20H,20H,20H,20H,00H
+
+        DB 70H,88H,88H,70H,88H,88H,70H
+
+        DB 00H,70H,88H,88H,78H,08H,10H
+
+        DB 60H,00H,00H,00H,20H,00H,00H
+
+        DB 20H,00H,00H,00H,00H,20H,00H
+
+        DB 00H,20H,20H,40H,18H,30H,60H
+
+        DB 0C0H,60H,30H,18H,00H,00H,00H
+
+        DB 0F8H,00H,0F8H,00H,00H,00H,0C0H
+
+        DB 60H,30H,18H,30H,60H,0C0H,00H
+
+        DB 70H,88H,08H,10H,20H,00H,20H
+
+        DB 00H,70H,88H,08H,68H,0A8H,0A8H
+
+        DB 70H,00H,20H,50H,88H,88H,0F8H
+
+        DB 88H,88H,00H,0F0H,48H,48H,70H
+
+        DB 48H,48H,0F0H,00H,30H,48H,80H
+
+        DB 80H,80H,48H,30H,00H,0E0H,50H
+
+        DB 48H,48H,48H,50H,0E0H,00H,0F8H
+
+        DB 80H,80H,0F0H,80H,80H,0F8H,00H
+
+        DB 0F8H,80H,80H,0F0H,80H,80H,80H
+
+        DB 00H,70H,88H,80H,0B8H,88H,88H
+
+        DB 70H,00H,88H,88H,88H,0F8H,88H
+
+        DB 88H,88H,00H,70H,20H,20H,20H
+
+        DB 20H,20H,70H,00H,38H,10H,10H
+
+        DB 10H,90H,90H,60H,00H,88H,90H
+
+        DB 0A0H,0C0H,0A0H,90H,88H,00H,80H
+
+        DB 80H,80H,80H,80H,80H,0F8H,00H
+
+        DB 88H,0D8H,0A8H,0A8H,88H,88H,88H
+
+        DB 00H,88H,0C8H,0C8H,0A8H,98H,98H
+
+        DB 88H,00H,70H,88H,88H,88H,88H
+
+        DB 88H,70H,00H,0F0H,88H,88H,0F0H
+
+        DB 80H,80H,80H,00H,70H,88H,88H
+
+        DB 88H,0A8H,90H,68H,00H,0F0H,88H
+
+        DB 88H,0F0H,0A0H,90H,88H,00H,70H
+
+        DB 88H,80H,70H,08H,88H,70H,00H
+
+        DB 0F8H,20H,20H,20H,20H,20H,20H
+
+        DB 00H,88H,88H,88H,88H,88H,88H
+
+        DB 70H,00H,88H,88H,88H,88H,50H
+
+        DB 50H,20H,00H,88H,88H,88H,0A8H
+
+        DB 0A8H,0D8H,88H,00H,88H,88H,50H
+
+        DB 20H,50H,88H,88H,00H,88H,88H
+
+        DB 88H,70H,20H,20H,20H,00H,0F8H
+
+        DB 08H,10H,20H,40H,80H,0F8H,00H
+
+        DB 70H,40H,40H,40H,40H,40H,70H
+
+        DB 00H,88H,50H,20H,70H,20H,70H
+
+        DB 20H,00H,70H,10H,10H,10H,10H
+
+        DB 10H,70H,00H,20H,50H,88H,00H
+
+        DB 00H,00H,00H,00H,00H,00H,00H
+
+        DB 00H,00H,00H,0F8H,00H,40H,20H
+
+        DB 10H,00H,00H,00H,00H,00H,00H
+
+        DB 00H,70H,08H,78H,88H,78H,00H
+
+        DB 80H,80H,0B0H,0C8H,88H,0C8H,0B0H
+
+        DB 00H,00H,00H,70H,88H,80H,88H
+
+        DB 70H,00H,08H,08H,68H,98H,88H
+
+        DB 98H,68H,00H,00H,00H,70H,88H
+
+        DB 0F8H,80H,70H,00H,10H,28H,20H
+
+        DB 0F8H,20H,20H,20H,00H,00H,00H
+
+        DB 68H,98H,98H,68H,08H,70H,80H
+
+        DB 80H,0F0H,88H,88H,88H,88H,00H
+
+        DB 20H,00H,60H,20H,20H,20H,70H
+
+        DB 00H,10H,00H,30H,10H,10H,10H
+
+        DB 90H,60H,40H,40H,48H,50H,60H
+
+        DB 50H,48H,00H,60H,20H,20H,20H
+
+        DB 20H,20H,70H,00H,00H,00H,0D0H
+
+        DB 0A8H,0A8H,0A8H,0A8H,00H,00H,00H
+
+        DB 0B0H,0C8H,88H,88H,88H,00H,00H
+
+        DB 00H,70H,88H,88H,88H,70H,00H
+
+        DB 00H,00H,0B0H,0C8H,0C8H,0B0H,80H
+
+        DB 80H,00H,00H,68H,98H,98H,68H
+
+        DB 08H,08H,00H,00H,0B0H,0C8H,80H
+
+        DB 80H,80H,00H,00H,00H,78H,80H
+
+        DB 0F0H,08H,0F0H,00H,40H,40H,0F0H
+
+        DB 40H,40H,48H,30H,00H,00H,00H
+
+        DB 90H,90H,90H,90H,68H,00H,00H
+
+        DB 00H,88H,88H,88H,50H,20H,00H
+
+        DB 00H,00H,88H,0A8H,0A8H,0A8H,50H
+
+        DB 00H,00H,00H,88H,50H,20H,50H
+
+        DB 88H,00H,00H,00H,88H,88H,98H
+
+        DB 68H,08H,70H,00H,00H,0F8H,10H
+
+        DB 20H,40H,0F8H,00H,18H,20H,20H
+
+        DB 40H,20H,20H,18H,00H,20H,20H
+
+        DB 20H,00H,20H,20H,20H,00H,0C0H
+
+        DB 20H,20H,10H,20H,20H,0C0H,00H
+
+        DB 40H,0A8H,10H,00H,00H,00H,00H
+
+        DB 00H,00H,00H,00H,00H,00H,00H
+
+        DB 00H,00H,10H,38H,7CH,0FEH,0FEH
+
+        DB 38H,7CH,00H,6CH,0FEH,0FEH,0FEH
+
+        DB 7CH,38H,10H,00H,38H,38H,0FEH
+
+        DB 0FEH,0D6H,10H,7CH,00H,10H,38H
+
+        DB 7CH,0FEH,7CH,38H,10H,00H,00H
+
+        DB 78H,84H,84H,84H,84H,78H,00H
+
+        DB 00H,78H,0FCH,0FCH,0FCH,0FCH,78H
+
+        DB 00H,40H,0FEH,48H,70H,48H,82H
+
+        DB 7CH,00H,00H,00H,10H,7EH,3CH
+
+        DB 5AH,34H,00H,00H,00H,40H,42H
+
+        DB 42H,52H,20H,00H,00H,00H,1CH
+
+        DB 1CH,22H,02H,0CH,00H,00H,00H
+
+        DB 18H,7EH,18H,30H,6EH,00H,00H
+
+        DB 00H,12H,7EH,3CH,52H,34H,00H
+
+        DB 00H,00H,28H,7CH,2AH,22H,24H
+
+        DB 00H,00H,00H,08H,5CH,6AH,0CH
+
+        DB 30H,00H,00H,00H,08H,0EH,38H
+
+        DB 4CH,3AH,00H,00H,00H,00H,3CH
+
+        DB 02H,02H,1CH,00H,00H,00H,00H
+
+        DB 00H,00H,00H,00H,00H,20H,0FEH
+
+        DB 20H,7CH,0AAH,0B2H,64H,00H,00H
+
+        DB 80H,82H,82H,82H,90H,60H,00H
+
+        DB 1CH,00H,7CH,02H,02H,04H,18H
+
+        DB 00H,38H,00H,0FEH,08H,30H,50H
+
+        DB 9EH,00H,20H,0FAH,22H,7CH,0A2H
+
+        DB 0A2H,4CH,00H,40H,44H,0F2H,4AH
+
+        DB 48H,88H,30H,00H,10H,0FCH,08H
+
+        DB 3EH,04H,80H,7CH,00H,18H,18H
+
+        DB 30H,60H,60H,30H,18H,00H,04H
+
+        DB 84H,0BEH,84H,84H,84H,48H,00H
+
+        DB 00H,0FCH,02H,00H,40H,80H,7EH
+
+        DB 00H,10H,16H,0F8H,08H,7CH,80H
+
+        DB 78H,00H,80H,80H,80H,80H,84H
+
+        DB 88H,70H,00H,08H,0FEH,08H,38H
+
+        DB 48H,38H,08H,00H,04H,44H,0FEH
+
+        DB 44H,44H,40H,3EH,00H,64H,28H
+
+        DB 30H,0FEH,20H,40H,3CH,00H,00H
+
+        DB 00H,00H,00H,00H,00H,00H,00H
+
+        DB 00H,00H,00H,00H,60H,90H,60H
+
+        DB 00H,38H,20H,20H,20H,00H,00H
+
+        DB 00H,00H,00H,00H,00H,20H,20H
+
+        DB 20H,0E0H,00H,00H,00H,00H,00H
+
+        DB 80H,40H,20H,00H,00H,00H,00H
+
+        DB 30H,30H,00H,00H,00H,0F8H,08H
+
+        DB 0F8H,08H,10H,20H,40H,00H,00H
+
+        DB 00H,0F0H,10H,60H,40H,80H,00H
+
+        DB 00H,10H,20H,60H,0A0H,20H,20H
+
+        DB 00H,00H,20H,0F0H,90H,10H,20H
+
+        DB 40H,00H,00H,00H,0F0H,20H,20H
+
+        DB 20H,0F0H,00H,00H,20H,0F0H,60H
+
+        DB 0A0H,0A0H,20H,00H,00H,40H,0F8H
+
+        DB 48H,50H,40H,40H,00H,00H,00H
+
+        DB 70H,10H,10H,10H,0F8H,00H,00H
+
+        DB 00H,0F0H,10H,0F0H,10H,0F0H,00H
+
+        DB 00H,00H,0A8H,0A8H,08H,10H,20H
+
+        DB 00H,00H,00H,00H,0F8H,00H,00H
+
+        DB 00H,00H,0F8H,08H,28H,30H,20H
+
+        DB 20H,40H,00H,08H,10H,20H,60H
+
+        DB 0A0H,20H,20H,00H,20H,0F8H,88H
+
+        DB 88H,08H,10H,20H,00H,00H,0F8H
+
+        DB 20H,20H,20H,20H,0F8H,00H,10H
+
+        DB 0F8H,10H,30H,50H,90H,10H,00H
+
+        DB 20H,0F8H,28H,28H,28H,48H,88H
+
+        DB 00H,20H,0F8H,20H,0F8H,20H,20H
+
+        DB 20H,00H,78H,48H,88H,08H,08H
+
+        DB 10H,20H,00H,40H,78H,50H,90H
+
+        DB 10H,10H,20H,00H,00H,0F8H,08H
+
+        DB 08H,08H,08H,0F8H,00H,50H,0F8H
+
+        DB 50H,50H,10H,10H,20H,00H,00H
+
+        DB 0C0H,08H,0C8H,08H,10H,0E0H,00H
+
+        DB 00H,0F8H,08H,10H,20H,50H,88H
+
+        DB 00H,40H,0F8H,48H,50H,40H,40H
+
+        DB 38H,00H,88H,88H,48H,08H,10H
+
+        DB 20H,40H,00H,78H,48H,78H,88H
+
+        DB 08H,10H,20H,00H,10H,0E0H,20H
+
+        DB 0F8H,20H,20H,40H,00H,0A8H,0A8H
+
+        DB 0A8H,08H,08H,10H,20H,00H,70H
+
+        DB 00H,0F8H,20H,20H,20H,40H,00H
+
+        DB 40H,40H,60H,50H,48H,40H,40H
+
+        DB 00H,20H,0F8H,20H,20H,20H,20H
+
+        DB 40H,00H,00H,70H,00H,00H,00H
+
+        DB 00H,0F8H,00H,00H,0F8H,08H,0D0H
+
+        DB 20H,50H,88H,00H,20H,0F8H,08H
+
+        DB 30H,0E8H,20H,20H,00H,08H,08H
+
+        DB 08H,10H,20H,40H,80H,00H,20H
+
+        DB 10H,48H,48H,48H,48H,88H,00H
+
+        DB 80H,80H,0F8H,80H,80H,80H,78H
+
+        DB 00H,0F8H,08H,08H,08H,10H,20H
+
+        DB 40H,00H,00H,40H,0A0H,10H,08H
+
+        DB 08H,00H,00H,20H,0F8H,20H,20H
+
+        DB 0A8H,0A8H,20H,00H,00H,0F8H,08H
+
+        DB 08H,50H,20H,10H,00H,0F0H,00H
+
+        DB 60H,00H,00H,0F0H,08H,00H,10H
+
+        DB 20H,40H,80H,90H,88H,0F8H,00H
+
+        DB 08H,08H,08H,50H,20H,50H,80H
+
+        DB 00H,78H,20H,0F8H,20H,20H,20H
+
+        DB 18H,00H,40H,0F8H,48H,48H,50H
+
+        DB 40H,40H,00H,00H,70H,10H,10H
+
+        DB 10H,10H,0F8H,00H,00H,0F8H,08H
+
+        DB 0F8H,08H,08H,0F8H,00H,70H,00H
+
+        DB 0F8H,08H,08H,10H,20H,00H,48H
+
+        DB 48H,48H,48H,48H,10H,20H,00H
+
+        DB 10H,50H,50H,50H,50H,58H,90H
+
+        DB 00H,40H,40H,40H,48H,48H,50H
+
+        DB 60H,00H,00H,0F8H,88H,88H,88H
+
+        DB 88H,0F8H,00H,0F8H,88H,88H,08H
+
+        DB 08H,10H,20H,00H,00H,0C0H,00H
+
+        DB 08H,08H,10H,0E0H,00H,90H,48H
+
+        DB 00H,00H,00H,00H,00H,00H,60H
+
+        DB 90H,60H,00H,00H,00H,00H,00H
+
+        DB 40H,0FEH,40H,5EH,80H,0A0H,9EH
+
+        DB 00H,20H,0FEH,40H,0F8H,04H,04H
+
+        DB 78H,00H,00H,00H,0FCH,02H,02H
+
+        DB 04H,38H,00H,00H,0FEH,0CH,30H
+
+        DB 40H,40H,38H,00H,10H,12H,1CH
+
+        DB 30H,40H,40H,3EH,00H,24H,0F2H
+
+        DB 48H,48H,9CH,0AAH,10H,00H,80H
+
+        DB 9EH,80H,80H,0A0H,0BEH,0C0H,00H
+
+        DB 44H,4CH,7AH,0AAH,0A6H,0AAH,6CH
+
+        DB 00H,40H,0ECH,52H,62H,0CEH,4AH
+
+        DB 4CH,00H,00H,38H,54H,92H,0A2H
+
+        DB 0A2H,4CH,00H,04H,0BEH,84H,84H
+
+        DB 9EH,0A4H,5CH,00H,08H,4CH,0C6H
+
+        DB 46H,44H,44H,38H,00H,20H,18H
+
+        DB 20H,16H,8AH,0CAH,18H,00H,00H
+
+        DB 20H,70H,0D8H,8CH,06H,02H,00H
+
+        DB 3EH,84H,0BEH,84H,9CH,0A6H,18H
+
+        DB 00H,08H,7EH,08H,7EH,38H,4CH
+
+        DB 3AH,00H,0E0H,24H,24H,7EH,0A4H
+
+        DB 0A4H,68H,00H,20H,0FCH,24H,62H
+
+        DB 0A0H,62H,3CH,00H,04H,44H,7CH
+
+        DB 0C6H,0AAH,92H,64H,00H,20H,20H
+
+        DB 78H,20H,78H,22H,1CH,00H,00H
+
+        DB 48H,0FCH,4AH,42H,4CH,40H,00H
+
+        DB 08H,0BCH,0CAH,8AH,0BCH,08H,30H
+
+        DB 00H,08H,08H,0EH,08H,78H,8CH
+
+        DB 72H,00H,38H,84H,80H,0FCH,0C2H
+
+        DB 02H,38H,00H,00H,42H,42H,42H
+
+        DB 62H,04H,18H,00H,7CH,08H,30H
+
+        DB 0DCH,62H,92H,7CH,00H,20H,2CH
+
+        DB 0F4H,24H,64H,0E4H,26H,00H,7CH
+
+        DB 18H,20H,5CH,82H,02H,7CH,00H
+
+        DB 40H,60H,0DCH,62H,42H,0C2H,5CH
+
+        DB 00H,10H,30H,20H,70H,48H,0CEH
+
+        DB 84H,00H,00H,00H,00H,00H,00H
+
+        DB 00H,00H,00H,00H,00H,00H,00H
+
+        DB 00H,00H,00H,00H
+    ;SUBTTL - MSXINL, Screen editor - Line input and function character
+
+
+    ;SUBTTL - MSXINL, Screen editor - Process special characters
+;
+;   Constants
+GRPDIF  EQU 2000H
+;
+;   Routines
+CHRGTR  EQU 2686H
+DIOERR  EQU 73B2H
+FILOU1  EQU 6C48H
+GETYPR  EQU 2689H
+INIT    EQU 2680H
+READYR  EQU 409BH
+STOP    EQU 63E6H
+SYNCHR  EQU 2683H
+;
+;   Workspace
+ASCPCT1 EQU 0F40BH
+ASCPCT2 EQU 0F40DH
+ATRBAS  EQU 0F928H
+ATRBYT  EQU 0F3F2H
+AUTFLG  EQU 0F6AAH
+BAKCLR  EQU 0F3EAH
+BASROM  EQU 0FBB1H
+BDRCLR  EQU 0F3EBH
+BRDATR  EQU 0FCB2H
+BUF     EQU 0F55EH
+BUFEND  EQU 0FC18H
+BUFMIN  EQU 0F55DH
+CAPST   EQU 0FCABH
+CGPBAS  EQU 0F924H
+CGPNT   EQU 0F91FH
+CLIKFL  EQU 0FBD9H
+CLIKSW  EQU 0F3DBH
+CLOC    EQU 0F92AH
+CLPRIM  EQU 0F38CH
+CMASK   EQU 0F92CH
+CNSDFG  EQU 0F3DEH
+CODSAV  EQU 0FBCCH
+CRTCNT  EQU 0F3B1H
+CSAVEA  EQU 0F942H
+CSAVEM  EQU 0F944H
+CSRSW   EQU 0FCA9H
+CSRX    EQU 0F3DDH
+CSRY    EQU 0F3DCH
+CSTYLE  EQU 0FCAAH
+CURLIN  EQU 0F41CH
+ENSTOP  EQU 0FBB0H
+ESCCNT  EQU 0FCA7H
+EXPTBL  EQU 0FCC1H
+FNKFLG  EQU 0FBCEH
+FNKSTR  EQU 0F87FH
+FNKSWI  EQU 0FBCDH
+FORCLR  EQU 0F3E9H
+FSTPOS  EQU 0FBCAH
+GETPNT  EQU 0F3FAH
+GRPACX  EQU 0FCB7H
+GRPACY  EQU 0FCB9H
+GRPATR  EQU 0F3CDH
+GRPCGP  EQU 0F3CBH
+GRPCOL  EQU 0F3C9H
+GRPHED  EQU 0FCA6H
+GRPNAM  EQU 0F3C7H
+GRPPAT  EQU 0F3CFH
+HEADER  EQU 0F40AH
+HIGH    EQU 0F408H
+INSFLG  EQU 0FCA8H
+INTCNT  EQU 0FCA2H
+INTFLG  EQU 0FC9BH
+INTVAL  EQU 0FCA0H
+JIFFY   EQU 0FC9EH
+KANAMD  EQU 0FCADH
+KANAST  EQU 0FCACH
+KEYBUF  EQU 0FBF0H
+LINL32  EQU 0F3AFH
+LINL40  EQU 0F3AEH
+LINLEN  EQU 0F3B0H
+LINTTB  EQU 0FBB2H
+LOW     EQU 0F406H
+LOWLIM  EQU 0FCA4H
+LPTPOS  EQU 0F415H
+MLTATR  EQU 0F3D7H
+MLTCGP  EQU 0F3D5H
+MLTNAM  EQU 0F3D1H
+MLTPAT  EQU 0F3D9H
+MUSICF  EQU 0FB3FH
+NAMBAS  EQU 0F922H
+NEWKEY  EQU 0FBE5H
+NTMSXP  EQU 0F417H
+OLDKEY  EQU 0FBDAH
+OLDSCR  EQU 0FCB0H
+ONGSBF  EQU 0FBD8H
+PADX    EQU 0FC9DH
+PADY    EQU 0FC9CH
+PATBAS  EQU 0F926H
+PATWRK  EQU 0FC40H
+PLYCNT  EQU 0FB40H
+PRTFLG  EQU 0F416H
+PTRFIL  EQU 0F864H
+PUTPNT  EQU 0F3F8H
+QUEBAK  EQU 0F971H
+QUEUEN  EQU 0FB3EH
+QUEUES  EQU 0F3F3H
+RAMLOW  EQU 0F380H
+RAWPRT  EQU 0F418H
+RDPRIM  EQU 0F380H
+REPCNT  EQU 0F3F7H
+REQSTP  EQU 0FC6AH
+RG0SAV  EQU 0F3DFH
+RG1SAV  EQU 0F3E0H
+RUNFLG  EQU 0F866H
+SAVSTK  EQU 0F6B1H
+SCNCNT  EQU 0F3F6H
+SCRMOD  EQU 0FCAFH
+SFTKEY  EQU 0FBEBH
+SLTTBL  EQU 0FCC5H
+STATFL  EQU 0F3E7H
+T32ATR  EQU 0F3C3H
+T32CGP  EQU 0F3C1H
+T32COL  EQU 0F3BFH
+T32NAM  EQU 0F3BDH
+T32PAT  EQU 0F3C5H
+TRGFLG  EQU 0F3E8H
+TRPTBL  EQU 0FC4CH
+TTYPOS  EQU 0F661H
+TXTCGP  EQU 0F3B7H
+TXTNAM  EQU 0F3B3H
+VCBA    EQU 0FB41H
+VCBB    EQU 0FB66H
+VCBC    EQU 0FB8BH
+VOICAQ  EQU 0F975H
+VOICEN  EQU 0FB38H
+WINWID  EQU 0FCA5H
+WORK1   EQU 0F866H
+WORK2   EQU 0F867H
+WORK3   EQU 0F869H
+WRPRIM  EQU 0F385H
+;
+;   Hooks
+H.CHGE  EQU 0FDC2H
+H.CHPU  EQU 0FDA4H
+H.DSPC  EQU 0FDA9H
+H.DSPF  EQU 0FDB3H
+H.ERAC  EQU 0FDAEH
+H.ERAF  EQU 0FDB8H
+H.FORM  EQU 0FFACH
+H.INIP  EQU 0FDC7H
+H.INLI  EQU 0FDE5H
+H.ISFL  EQU 0FEDFH
+H.KEYC  EQU 0FDCCH
+H.KEYI  EQU 0FD9AH
+H.KYEA  EQU 0FDD1H
+H.LPTO  EQU 0FFB6H
+H.LPTS  EQU 0FFBBH
+H.NMI   EQU 0FDD6H
+H.OUTD  EQU 0FEE4H
+H.PHYD  EQU 0FFA7H
+H.PINL  EQU 0FDDBH
+H.QINL  EQU 0FDE0H
+H.TIMI  EQU 0FD9FH
+H.TOTE  EQU 0FDBDH
+
+        END

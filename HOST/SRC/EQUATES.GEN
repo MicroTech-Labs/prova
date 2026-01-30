@@ -1,0 +1,193 @@
+;
+; EQUATES.GEN
+;
+; T2 input codes
+T2I_C       	equ		0   ; COLD
+T2I_H			equ		1   ; HOT
+T2I_M   		equ		2   ; MAGIC
+T2I_S   		equ		3   ; STOP
+;T2I_BONUS		equ		4
+T2I_LH  		equ		5   ; LOAD HOLE
+T2I_ST  		equ		6   ; STATS
+
+; T2 output codes
+T2O_L0		equ		0       ; LOSER player 0
+T2O_L1		equ		1       ; LOSER player 1
+T2O_X   	equ		2       ; EXIT
+T2O_S   	equ		3       ; STOP
+T2O_M   	equ		4       ; MAGIC
+T2O_B		equ		5       ; BONUS
+T2O_LU      equ		7		; LEVEL-UP valid only when 1 player mode
+T2O_TO      equ		8		; TIMEOUT
+
+;	costanti
+;
+CR      equ     13
+LF      equ     10
+;
+;       routine del BIOS
+;
+;CALSLT	equ	001ch	; IX = add, IYh = Slot Id.
+;DISSCR	equ	0041h	; IN	//
+;			; OUT	//
+;			; MOD.	AF,BC
+;ENASCR	equ	0044h	; IN	//
+;			; OUT	//
+;			; MOD.	AF,BC
+;WRTVDP	equ	0047h	; IN	B = data byte
+;			;	C = reg. number
+;			; OUT	//
+;			; MOD.	AF,B,EI
+;WRTVRM	equ	004dh	; IN	A = byte to write
+;			;	HL = vram address (only 14 bit addresses)
+;			; OUT	//
+;			; MOD.	EI
+;SETRD	equ	0050h	; IN	HL (14 bits only)
+;			; OUT	//
+;			; MOD.	AF
+;LDIRMV	equ	0059h	; IN 	HL = src add (vram)
+;			;	DE = des add (ram)
+;			;	BC = byte count
+;			; OUT	//
+;			; MOD.	All
+CHGMOD	equ	005fh	; IN	A screen to select
+;			; OUT	//
+;			; MOD.	AF,BC,DE,HL,EI
+;CHGCLR	equ	0062h	; IN    FORCLR (0F3E9h)
+;			;	BAKCLR (0F3EAh)
+;			;	BDRCLR (0F3EBh)
+;			; OUT	//
+;			; MOD.	AF,BC,HL,EI
+CLS	    equ	000c3h	; Z = 1 per clear screen
+;GICINI	equ	0090h	; IN	//
+;			; OUT	//
+;			; MOD.	EI
+;CHSNS   equ     0009ch  ; IN    //
+;                       ; OUT   NZ se ci sono caratteri
+;                       ; MOD.  AF,EI
+CHGET   equ     0009fh  ; IN    //
+;                       ; OUT   A = carattere
+;                       ; MOD.  AF,EI
+;POSIT   equ     000c6h  ; IN    H = colonna, L = riga
+;                       ; OUT   //
+;                       ; MOD.  AF,EI
+GTSTCK  equ     000d5h  ; IN    A = 0,1,2
+;                       ; OUT   A = direzione
+GTTRIG	equ	000d8h	; IN	A = 0 (kbd),1(A1),2(A2),3(B1),4(B2)
+;                       ; OUT   A = 0 non premuto
+;                       ;       A = 0ffh premuto
+;SNSMAT	equ	0141h	; IN	A = kbd row
+;                       ; OUT   A = data from kbd
+;			; MOD.	AF,C,EI
+;KILBUF	equ	00156h	; IN	//
+;			; OUT	//
+;			; MOD.	HL
+;BIGFIL	equ	0016Bh	; IN	HL = add in vram (16 bit , page considered)
+;			;	BC = number of bytes
+;			;	A = value to write
+;			; OUT	//
+;			; MOD.	AF,BC
+;NSTWRT	equ	00171h	; IN	HL = add in vram (16 bit only)
+;			; OUT	//
+;			; MOD.	AF
+;NRDVRM	equ	00174h	; IN	HL = add in vram (16 bit only)
+;			; OUT	A = byte read
+;			; MOD.	F
+;NWRVRM	equ	00177h	; IN	A = data byte
+;			;	HL = address in vram (16 bit addresses)
+;			; OUT	//
+;			; MOD.	AF
+;CHGCPU	equ	00180h	; IN	A %LxxxxxBB
+;			;		L = 1 attiva led
+;			;		BB = 00 z80
+;			;		   = 01 r800 rom
+;			;		   = 02 r800 ram
+GETCPU	equ	00183h	; IN	//
+;Output   : A = 0 0 0 0 0 0 x x
+;                           0 0 = Z80 (ROM) mode
+;                           0 1 = R800 ROM  mode
+;                           1 0 = R800 DRAM mode
+;			; MOD.	AF
+;
+; --------------
+; routine subrom
+;
+;SETPAG	equ	013Dh	; IN	DPPAGE (0FAF5h)
+;			;	ACPAGE (0FAF6h)
+;			; OUT	//
+;			; MOD.	AF
+;SETPLT	equ	014Dh	; IN	D = color code
+;			;	A = 0rrr0bbb	; r = red , b = blue
+;			;	E = 00000ggg	; g = green
+;			; OUT	//
+;			; MOD.	AF
+;
+; BLTVM	equ	0195h	; copia con op.log. da ram a vram
+;BLTVV	equ	0191h	; copia vram -> vram
+;
+; -----------------------
+; locazioni o entry-point
+;
+;EXBRSA	equ	0faf8h
+;
+bdos	equ	0f37dh
+dos 	equ	00005h
+
+HOKVLD  equ 0FB20h
+EXTBIO  equ 0FFCAh
+
+;
+; -------------
+; funzioni BDOS
+;
+;CONSOLE_OUTPUT  equ     2       ; IN    E = carattere da mandare
+;                               ; OUT   //
+;STRING_OUTPUT   equ     9       ; IN    DE ---> '$' terminated string
+;                               ; OUT   //
+;OPEN_FILE	equ	0fh	; IN	DE ---> fcb
+;				; OUT	A = 0 ---> Ok
+;				;	ogni  campo  del  fcb e' compilato
+;				;	A = ffh ---> errore
+;CLOSE_FILE	equ	10h	; IN	DE ---> fbc
+;				; OUT	A = 0 ---> Ok
+;				;	A = ffh ---> errore
+SET_DMA 	equ	1ah	; IN	DE ---> indirizzo del DMA
+;				; OUT	  //
+;
+;
+; ---------------------------------------
+; funzioni bios esteso ---> memory mapper
+ALL_SEG 	equ	0
+FRE_SEG		equ	3
+PUT_P0		equ	018h
+GET_P0		equ	01bh
+PUT_P1		equ	01eh
+GET_P1		equ	021h
+PUT_P2		equ	024h
+GET_P2		equ	027h
+;
+;
+; --------------------
+; variabili di sistema
+;
+PATBAS	equ	0F926h
+ATRBAS	equ	0F928h
+SCRMOD	equ	0FCAFh
+;
+; ------------------
+; codici comando vdp
+;
+;LMMC	equ	0b0h
+;
+; ---------------------------------------
+; codici operazioni logiche X comandi vdp
+;
+;IMP	equ	00000000b
+;AND	equ	00000001b
+;OR	equ	00000010b
+;XOR	equ	00000011b
+;NOT	equ	00000100b
+;
+;per operazioni T (transparent) settare il bit 3
+
+JIFFY:  equ 0FC9EH

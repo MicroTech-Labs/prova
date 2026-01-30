@@ -1,0 +1,1866 @@
+.comment %
+	(C) Copyright by MicroTech
+		All rights Reserved.
+
+Le funzioni chiamabili da C sono LABEL@::
+Le funzioni chiamabili da ASM sono _LABEL::
+
+Le variabili dichiarate (e allocate) in un .C che devono
+essere visibili da ASM vanno referenziate con
+LABEL@##
+dove ## serve ad esplicitare ad M80 che l'etichetta e' esterna
+e @ sembra essere implicitamente aggiunto alle etichette del C
+Attenzione al numero di caratteri (la @ entra nel computo dei 6 caratteri)
+%
+
+;------ Faking stuff for M80 and MX ------------------------------------
+module	macro		;; "module" must be lower cased
+	endm
+
+endmodule macro 	;; "endmodule" must be lower cased
+	endm
+
+extrn	macro
+	endm
+;-----------------------------------------------------------------------
+
+; ***
+
+	MODULE	A2A
+
+    INCLUDE A2A.INC
+
+PSG_SEL equ 0A0H
+PSG_WR  equ 0A1H
+PSG_RD  equ 0A2H
+RX      equ  01H
+;TX      equ  01H
+
+
+STL             equ     0E6H
+STH             equ     0E7H
+
+JOY_SEL_MASK    equ     040H
+
+
+
+r14:    defs    1
+r15:    defs    1
+save14: defs    1
+save15: defs    1
+pRx:    defs    2
+
+    EXTERNAL intLock@
+    EXTERNAL intUnlock@
+
+
+; internal utilities
+
+;   IN
+;   OUT
+;   MOD AF
+;   ACT save psg registers R14 and R15,
+;       preset psg to work with selected joystick port
+
+psgStart:
+
+    ; save R14
+
+    ld  a,14
+    out (PSG_SEL),a
+    in  a,(PSG_RD)
+    ld  (save14),a
+    ld  (r14),a
+
+    ; save R15 and preset
+
+    ld  a,15
+    out (PSG_SEL),a
+    in  a,(PSG_RD)
+    ld  (save15),a
+
+    and 0BFH    ; &= (~JOY_SEL_MASK)
+;;; or  040H    ; |= JOY_SEL_MASK       ; uncomment to select Joy B JOYSTICK B DEPENDENT
+
+    ld  (r15),a
+    out (PSG_WR),a
+
+    ret
+
+
+; ***
+;   IN
+;   OUT
+;   MOD A
+
+psgStop:
+
+    ld  a,14
+    out (PSG_SEL),a
+    ld  a,(save14)
+    out (PSG_WR),a
+
+    ld  a,15
+    out (PSG_SEL),a
+    ld  a,(save15)
+    out (PSG_WR),a
+
+    ret
+
+
+; routines name glossary
+; 123456
+; 1 = s for system timer
+;     z for z80 @ 3,5MHz
+; 2 = a for joystick port A
+;     b for joystick port B
+
+    ENDMODULE
+
+;   IN  HL = where to store received byte
+;   OUT A = 1 if ok
+;           2 if rx error
+;   ADD
+;   num of byte to be received
+;   where to store received byte(s)
+;   
+
+;   IN  HL = device handle
+;       DE = output buffer
+;   OUT A = 0 if ok
+;           0xFF if error
+
+A2Rx@::
+
+    push hl
+    pop ix
+
+    ex de,hl
+    jp  saRx
+
+
+;   OUT Cy = 0
+
+saRxZ:
+    scf
+    ccf
+    ret
+
+; OUT   Cy = 1
+
+saRxNZ:
+
+    scf
+    scf
+    ret
+
+saRx:
+
+    ; HL = output buffer
+
+    ld  (pRx),hl
+    call intLock@
+    push hl
+
+    call psgStart
+
+    ld  a,14
+    out (PSG_SEL),a
+
+    ; here *SP = interrupt info
+    ; r14, r15 setup
+
+    call saRxEP
+
+    ex  af,af'
+    ld  a,l
+    ld  hl,(pRx)
+    ld  (hl),a
+
+    call psgStop
+    pop hl
+    call intUnlock@
+    ex  af,af'
+    ret
+
+
+;   IN  hw setup
+;   OUT A = 0 if ok
+;       A = 0xFF if rx error
+;       L = rxd byte
+
+saRxEP:
+
+    ; register allocation/usage
+    ; A general porpouse
+    ; B = TB0
+    ; C = TB
+    ; D unused
+    ; E = "real time" time base
+    ; H = and mask
+    ; L = rx byte
+
+    ld  b,(ix + rxDelay)
+    ld  c,(ix + txDelay)
+
+    ; H = and mask
+
+    ld  h,(ix + rxAndMask)
+
+    ; wait for RX to go to 0
+
+saRxS:
+
+    in  a,(PSG_RD)
+    and h
+    jp  nz,saRxS
+
+    ; get time base for this char
+
+    in  a,(STL)
+    ld  e,a
+
+saRx0:
+
+    in  a,(STL)
+    sub e
+    cp  b
+    jp  c,saRx0
+
+    ; read bit 0
+
+    in  a,(PSG_RD)
+    and h
+    call    z,saRxZ
+    call    nz,saRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,b
+    ld  e,a
+
+saRx1:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,saRx1
+
+    ; read bit 1
+
+    in  a,(PSG_RD)
+    and h
+    call    z,saRxZ
+    call    nz,saRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+saRx2:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,saRx2
+
+    ; read bit 2
+
+    in  a,(PSG_RD)
+    and h
+    call    z,saRxZ
+    call    nz,saRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+saRx3:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,saRx3
+
+    ; read bit 3
+
+    in  a,(PSG_RD)
+    and h
+    call    z,saRxZ
+    call    nz,saRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+saRx4:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,saRx4
+
+    ; read bit 4
+
+    in  a,(PSG_RD)
+    and h
+    call    z,saRxZ
+    call    nz,saRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+saRx5:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,saRx5
+
+    ; read bit 5
+
+    in  a,(PSG_RD)
+    and h
+    call    z,saRxZ
+    call    nz,saRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+saRx6:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,saRx6
+
+    ; read bit 6
+
+    in  a,(PSG_RD)
+    and h
+    call    z,saRxZ
+    call    nz,saRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+saRx7:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,saRx7
+
+    ; read bit 7
+
+    in  a,(PSG_RD)
+    and h
+    call    z,saRxZ
+    call    nz,saRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+saRxE:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,saRxE
+
+    ; read stop bit
+
+    in  a,(PSG_RD)
+    and h
+
+    ; suppose stop bit @ right place
+
+    ld  a,0
+    ret nz
+
+    dec a
+    ret
+
+; ***
+
+saTxZ:
+    or  a
+    ret
+
+saTxNZ:
+    or  l
+    ret
+
+
+;   IN  HL = device handle
+;       E = byte to send
+;   OUT
+
+A2Tx@::
+
+    push hl
+    pop ix
+    ld  a,e
+
+    jp  saTx
+
+saTx:
+
+    ; A = char to send
+    ; IX = device handle
+
+    push af
+    call intLock@
+    call psgStart
+    ex (sp),hl
+
+    ld  a,15
+    out (PSG_SEL),a
+
+    ; register allocation/usage
+    ; A general purpouse
+    ; B = tx byte
+    ; C = R15
+    ; D = delay txDelay
+    ; E = "real time" time base
+    ; H = and mask
+    ; L = or mask
+
+    ld  b,h
+
+    ; *SP = interrupt info
+    ; r14, r15 setup
+
+    ; D = delay txDelay
+
+    ld  d,(ix + txDelay)
+
+    ; HL
+
+    ld  h,(ix + txAndMask)
+    ld  l,(ix + txOrMask)
+
+    ; C = R15
+    ; prepare start bit
+
+    ld  a,(r15)
+    and h
+    ld  c,a
+
+    ; "no return" point
+    ; E = time base
+
+    in  a,(STL)
+    ld  e,a
+
+    ; send start
+
+    ld  a,c
+    out (PSG_WR),a
+
+    ; prepare next bit
+
+    ld  a,c
+    and h                   ; clear tx
+    rr  b
+    call nc,saTxZ
+    call  c,saTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+saTxS:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,saTxS
+
+    ; send bit 0
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,saTxZ
+    call  c,saTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+saTx0:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,saTx0
+
+    ; send bit 1
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,saTxZ
+    call  c,saTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+saTx1:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,saTx1
+
+    ; send bit 2
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,saTxZ
+    call  c,saTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+saTx2:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,saTx2
+
+    ; send bit 3
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,saTxZ
+    call  c,saTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+saTx3:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,saTx3
+
+    ; send bit 4
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,saTxZ
+    call  c,saTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+saTx4:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,saTx4
+
+    ; send bit 5
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,saTxZ
+    call  c,saTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+saTx5:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,saTx5
+
+    ; send bit 6
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,saTxZ
+    call  c,saTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+saTx6:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,saTx6
+
+    ; send bit 7
+
+    ld  a,c
+    out (PSG_WR),a
+
+    or  l                   ; prepare stop bit
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+saTx7:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,saTx7
+
+    ; send stop bit
+
+    ld  a,c
+    out (PSG_WR),a
+    ld  (r15),a
+
+    ; wait for stop bit to be completely "exited"
+    ; (maybe a waste of cpu time)
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+saTxE:                  
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,saTxE
+
+    call psgStop
+    pop hl
+    jp intUnlock@
+
+; ***
+; prova direct I/O access
+
+;   IN  HL = handle
+;   OUT HL = interrupt info
+
+psgLock@::
+
+    push hl
+    pop ix
+
+    call intLock@
+    call psgStart
+    ret
+
+
+;   IN  HL = interrupt info
+;   OUT
+
+psgUnlock@::
+
+    call psgStop
+    jp intUnlock@
+
+psgTxZ:
+    or  a
+    ret
+
+psgTxNZ:
+    or  l
+    ret
+
+;   IN  HL = device handle
+;       E = byte to send
+;   OUT
+
+psgTx@::
+
+    push hl
+    pop ix
+    ld  b,e
+
+    ; A = char to send
+    ; IX = device handle
+
+    ld  a,15
+    out (PSG_SEL),a
+
+    ; register allocation/usage
+    ; A general purpouse
+    ; B = tx byte
+    ; C = R15
+    ; D = delay txDelay
+    ; E = "real time" time base
+    ; H = and mask
+    ; L = or mask
+
+;;;    ld  b,h
+
+    ; *SP = interrupt info
+    ; r14, r15 setup
+
+    ; D = delay txDelay
+
+    ld  d,(ix + txDelay)
+
+    ; HL
+
+    ld  h,(ix + txAndMask)
+    ld  l,(ix + txOrMask)
+
+    ; C = R15
+    ; prepare start bit
+
+    ld  a,(r15)
+    and h
+    ld  c,a
+
+    ; "no return" point
+    ; E = time base
+
+    in  a,(STL)
+    ld  e,a
+
+    ; send start
+
+    ld  a,c
+    out (PSG_WR),a
+
+    ; prepare next bit
+
+    ld  a,c
+    and h                   ; clear tx
+    rr  b
+    call nc,psgTxZ
+    call  c,psgTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+psgTxS:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,psgTxS
+
+    ; send bit 0
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,psgTxZ
+    call  c,psgTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+psgTx0:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,psgTx0
+
+    ; send bit 1
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,psgTxZ
+    call  c,psgTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+psgTx1:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,psgTx1
+
+    ; send bit 2
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,psgTxZ
+    call  c,psgTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+psgTx2:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,psgTx2
+
+    ; send bit 3
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,psgTxZ
+    call  c,psgTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+psgTx3:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,psgTx3
+
+    ; send bit 4
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,psgTxZ
+    call  c,psgTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+psgTx4:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,psgTx4
+
+    ; send bit 5
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,psgTxZ
+    call  c,psgTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+psgTx5:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,psgTx5
+
+    ; send bit 6
+
+    ld  a,c
+    out (PSG_WR),a
+
+    and h                   ; clear tx
+    rr  b
+    call nc,psgTxZ
+    call  c,psgTxNZ
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+psgTx6:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,psgTx6
+
+    ; send bit 7
+
+    ld  a,c
+    out (PSG_WR),a
+
+    or  l                   ; prepare stop bit
+    ld  c,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+psgTx7:
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,psgTx7
+
+    ; send stop bit
+
+    ld  a,c
+    out (PSG_WR),a
+    ld  (r15),a
+
+    ; wait for stop bit to be completely "exited"
+    ; (maybe a waste of cpu time)
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+psgTxE:                  
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,psgTxE
+
+    ret
+
+
+
+;   OUT Cy = 0
+
+psRxZ:
+    scf
+    ccf
+    ret
+
+; OUT   Cy = 1
+
+psRxNZ:
+
+    scf
+    scf
+    ret
+
+
+;   IN  HL = device handle
+;       DE = output buffer
+;   OUT A = 0 if ok
+;           0xFF if error
+
+psgRx@::
+
+    push hl
+    pop ix
+
+    ex de,hl
+
+;;;psRx:
+
+    ; HL = output buffer
+
+    push hl
+
+    ld  a,14
+    out (PSG_SEL),a
+
+    ; r14, r15 setup
+
+    call psRxEP
+
+    ld  b,a
+    ld  a,l
+    pop hl
+    ld  (hl),a
+    ld  a,b
+    ret
+
+
+;   IN  hw setup
+;   OUT A = 0 if ok
+;       A = 0xFF if rx error
+;       L = rxd byte
+
+psRxEP:
+
+    ; register allocation/usage
+    ; A general porpouse
+    ; B = TB0
+    ; C = TB
+    ; D unused
+    ; E = "real time" time base
+    ; H = and mask
+    ; L = rx byte
+
+    ld  b,(ix + rxDelay)
+    ld  c,(ix + txDelay)
+
+    ; H = and mask
+
+    ld  h,(ix + rxAndMask)
+
+    ; wait for RX to go to 0
+
+psRxS:
+
+    in  a,(PSG_RD)
+    and h
+    jp  nz,psRxS
+
+    ; get time base for this char
+
+    in  a,(STL)
+    ld  e,a
+
+psRx0:
+
+    in  a,(STL)
+    sub e
+    cp  b
+    jp  c,psRx0
+
+    ; read bit 0
+
+    in  a,(PSG_RD)
+    and h
+    call    z,psRxZ
+    call    nz,psRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,b
+    ld  e,a
+
+psRx1:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,psRx1
+
+    ; read bit 1
+
+    in  a,(PSG_RD)
+    and h
+    call    z,psRxZ
+    call    nz,psRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+psRx2:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,psRx2
+
+    ; read bit 2
+
+    in  a,(PSG_RD)
+    and h
+    call    z,psRxZ
+    call    nz,psRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+psRx3:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,psRx3
+
+    ; read bit 3
+
+    in  a,(PSG_RD)
+    and h
+    call    z,psRxZ
+    call    nz,psRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+psRx4:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,psRx4
+
+    ; read bit 4
+
+    in  a,(PSG_RD)
+    and h
+    call    z,psRxZ
+    call    nz,psRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+psRx5:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,psRx5
+
+    ; read bit 5
+
+    in  a,(PSG_RD)
+    and h
+    call    z,psRxZ
+    call    nz,psRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+psRx6:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,psRx6
+
+    ; read bit 6
+
+    in  a,(PSG_RD)
+    and h
+    call    z,psRxZ
+    call    nz,psRxNZ
+    rr  l
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+psRx7:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,psRx7
+
+    ; read bit 7
+
+    in  a,(PSG_RD)
+    and h
+    call    z,psRxZ
+    call    nz,psRxNZ
+    rr  l
+
+
+    ; assume no error, do not wait (ignore) stop bit
+    ld a,1
+    or a        ; NZ
+    ld a,0      ; A = OK
+    ret
+
+
+
+
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+psRxE:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,psRxE
+
+    ; read stop bit
+
+    in  a,(PSG_RD)
+    and h
+
+    ; suppose stop bit @ right place
+
+    ld  a,0
+    ret nz
+
+    dec a
+    ret
+
+; ***************************************************
+
+; ***
+;   IN  HL = device handle
+;   OUT HL = context info
+;       alternative registers setup
+
+rLock@::
+
+    push hl
+    pop ix
+
+    exx
+    ld  c,(ix + txDelay)
+    ld  h,(ix + txAndMask)
+    ld  l,(ix + txOrMask)
+    exx
+
+    ; get interrupt info in HL
+
+    call intLock@
+    jp  psgStart
+
+
+; ***
+;   IN  HL = context info
+;   OUT
+
+rUnlock@::
+
+    call psgStop
+    jp intUnlock@
+
+
+;   Rx (timing with system timer)
+;
+;   IN  HL = buf
+;       DE = buf size (must be > 0)
+;       BC = timeout (ms) (only rx)
+;
+;       alt. regs map
+;
+;       B = work byte
+;       C = TB
+;       D = spare (TB0 for rx, r15 for tx)
+;       E = "real time" time base
+;       H = tx AND mask
+;       L = tx OR mask
+
+
+; ***
+;   IN
+;   OUT
+;       psg & alternative register D setup for rx
+
+SwToRx@::
+
+    exx
+    ld  d,(ix + rxDelay)
+    exx
+
+    ld  a,14
+    out (PSG_SEL),a
+
+    ret
+
+; ***
+;   IN
+;   OUT
+;       psg setup for tx
+
+SwToTx@::
+
+    ld  a,15
+    out (PSG_SEL),a
+
+    ret
+
+
+s0Rx@::
+
+    ld  a,14
+    out (PSG_SEL),a     ; prepare to receive, r14 and r15 are setup
+
+s0RxC:
+
+    ; wait for RX to go to 0
+
+s0RxS:
+    in  a,(PSG_RD)
+    rrca
+    jp  c,s0RxS
+
+    ; get time base for this char
+
+    in  a,(STL)
+    exx
+    ld  e,a
+
+    ld  a,c
+    srl a
+    srl a        ; TB0 = TB + TB / 4
+    add a,c
+    ld d,a
+
+s0Rx0:
+
+    in  a,(STL)
+    sub e
+    cp  d
+    jp  c,s0Rx0
+
+    ; read bit 0
+
+    in  a,(PSG_RD)
+    rrca
+    rr  b
+
+    ; update timebase adding TB0
+
+    ld  a,e
+    add a,d
+    ld  e,a
+
+s0Rx1:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Rx1
+
+    ; read bit 1
+
+    in  a,(PSG_RD)
+    rrca
+    rr  b
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Rx2:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Rx2
+
+    ; read bit 2
+
+    in  a,(PSG_RD)
+    rrca
+    rr  b
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Rx3:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Rx3
+
+    ; read bit 3
+
+    in  a,(PSG_RD)
+    rrca
+    rr  b
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Rx4:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Rx4
+
+    ; read bit 4
+
+    in  a,(PSG_RD)
+    rrca
+    rr  b
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Rx5:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Rx5
+
+    ; read bit 5
+
+    in  a,(PSG_RD)
+    rrca
+    rr  b
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Rx6:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Rx6
+
+    ; read bit 6
+
+    in  a,(PSG_RD)
+    rrca
+    rr  b
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Rx7:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Rx7
+
+    ; read bit 7
+
+    in  a,(PSG_RD)
+    rrca
+    rr  b
+
+; ***************
+
+  IF 1
+
+    ld  a,b
+    exx
+    ld  (hl),a
+    inc hl
+    dec de
+    ld  a,d
+    or  e
+    jp  z,s0WLS
+
+    ; other chars expected
+
+    exx
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0RxE:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0RxE
+
+    ; read stop bit
+
+;;;    in  a,(PSG_RD)
+;;;    rrca
+
+    exx
+    jp  s0RxS
+
+s0WLS:
+
+    ; no more chars expected
+
+    exx
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0RxEL:         ; End Last
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0RxEL
+
+    ; read stop bit
+
+;;;    in  a,(PSG_RD)
+;;;    rrca
+
+    exx
+    xor a
+    ret
+
+ ELSE
+
+    ; update timebase
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0RxE:
+
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0RxE
+
+    ; read stop bit
+
+    in  a,(PSG_RD)
+    rrca
+    ld  a,b
+    exx                     ; A = rxd byte, Cy = 1 if ok, Cy = 0 if stop bit not found
+
+    ld  (hl),a
+    inc hl
+
+    dec de
+    ld  a,d
+    or  e
+    jp  nz,s0RxC
+
+    ;;; xor a ;;; A already 0
+    ret
+
+ ENDIF
+
+; ***
+
+;   Tx (timing with system timer)
+;
+;   IN  HL = buf
+;       DE = buf size (must be > 0)
+;
+
+; called if Cy = 0: A.tx = 0, NB: Cy is reset
+s0TxZ:
+    and h
+    ret
+
+; called if Cy = 1: A.tx = 1, NB: Cy is reset
+s0TxNZ:
+    or  l
+    ret
+
+s0Tx@::
+
+    ld  a,15
+    out (PSG_SEL),a
+
+s0TxC@::
+
+    ld  a,(hl)
+    exx
+    ld  b,a
+
+    in  a,(PSG_RD)
+    and h
+    ld  d,a     ; prepare D with tx = 0
+
+    ; "no return" point
+    ; E = time base
+
+    in  a,(STL)
+    ld  e,a
+
+    ; send start
+
+    ld  a,d
+    out (PSG_WR),a
+
+    ; prepare next bit
+
+    rr  b
+    call nc,s0TxZ           ; DO NOT CHANGE ORDER!
+    call  c,s0TxNZ
+    ld  d,a                 ; D is ready for transmission
+
+s0TxS:
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0TxS
+
+    ; send bit 0
+
+    ld  a,d
+    out (PSG_WR),a
+
+    rr  b
+    call nc,s0TxZ
+    call  c,s0TxNZ
+    ld  d,a
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Tx0:
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Tx0
+
+    ; send bit 1
+
+    ld  a,d
+    out (PSG_WR),a
+
+    rr  b
+    call nc,s0TxZ
+    call  c,s0TxNZ
+    ld  d,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Tx1:
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Tx1
+
+    ; send bit 2
+
+    ld  a,d
+    out (PSG_WR),a
+
+    rr  b
+    call nc,s0TxZ
+    call  c,s0TxNZ
+    ld  d,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Tx2:
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Tx2
+
+    ; send bit 3
+
+    ld  a,d
+    out (PSG_WR),a
+
+    rr  b
+    call nc,s0TxZ
+    call  c,s0TxNZ
+    ld  d,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Tx3:
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Tx3
+
+    ; send bit 4
+
+    ld  a,d
+    out (PSG_WR),a
+
+    rr  b
+    call nc,s0TxZ
+    call  c,s0TxNZ
+    ld  d,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Tx4:
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Tx4
+
+    ; send bit 5
+
+    ld  a,d
+    out (PSG_WR),a
+
+    rr  b
+    call nc,s0TxZ
+    call  c,s0TxNZ
+    ld  d,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Tx5:
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Tx5
+
+    ; send bit 6
+
+    ld  a,d
+    out (PSG_WR),a
+
+    rr  b
+    call nc,s0TxZ
+    call  c,s0TxNZ
+    ld  d,a                 ; C is ready for transmission
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Tx6:
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Tx6
+
+    ; send bit 7
+
+    ld  a,d
+    out (PSG_WR),a
+
+    scf                     ; prepare stop bit
+    call nc,s0TxZ
+    call  c,s0TxNZ
+    ld  d,a
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0Tx7:
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0Tx7
+
+    ; send stop bit
+
+    ld  a,d
+    out (PSG_WR),a
+
+    ; wait for stop bit to be completely "exited"
+    ; (maybe a waste of cpu time)
+
+    ld  a,e
+    add a,c
+    ld  e,a
+
+s0TxE:                  
+    in  a,(STL)
+    sub e
+    cp  c
+    jp  c,s0TxE
+
+    exx
+
+    inc hl
+    dec de
+    ld  a,d
+    or  e
+    jp  nz,s0TxC@
+
+    ret
+
+    end
+
+; EOF

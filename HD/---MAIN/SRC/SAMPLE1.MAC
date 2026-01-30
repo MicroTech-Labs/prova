@@ -1,0 +1,246 @@
+
+;	MSX-C ver 1.20p   (code generator)
+
+	dseg
+env@:	defs	2
+	cseg
+?59999:
+	defb	83,72,69,76,76,0
+?59998:
+	defb	37,115,61,37,115,10,0
+?59997:
+	defb	80,82,79,71,82,65,77,0
+?59996:
+	defb	37,115,61,37,115,10,0
+?59995:
+	defb	80,65,82,65,77,69,84,69,82,83
+	defb	0
+?59994:
+	defb	37,115,61,37,115,10,0
+?59993:
+	defb	74,67,0
+?59992:
+	defb	37,115,61,37,115,10,0
+
+getEV@:
+	ld	hl,65516
+	add	hl,sp
+	ld	sp,hl
+	ld	hl,?59999
+	push	hl
+	call	getenv
+	pop	de
+	ld	a,l
+	or	h
+	jp	z,@0
+	push	hl
+	push	de
+	ld	bc,?59998
+	push	bc
+	ld	hl,3
+	call	printf
+	pop	bc
+	pop	bc
+	pop	bc
+@0:
+	ld	hl,?59997
+	push	hl
+	call	getenv
+	pop	de
+	ld	a,l
+	or	h
+	jp	z,@1
+	push	hl
+	push	de
+	ld	bc,?59996
+	push	bc
+	ld	hl,3
+	call	printf
+	pop	bc
+	pop	bc
+	pop	bc
+@1:
+	ld	hl,?59995
+	push	hl
+	call	getenv
+	pop	de
+	ld	a,l
+	or	h
+	jp	z,@2
+	push	hl
+	push	de
+	ld	bc,?59994
+	push	bc
+	ld	hl,3
+	call	printf
+	pop	bc
+	pop	bc
+	pop	bc
+@2:
+	ld	hl,?59993
+	push	hl
+	call	getenv
+	pop	de
+	ld	a,l
+	or	h
+	jp	z,@3
+	push	hl
+	push	de
+	ld	bc,?59992
+	push	bc
+	ld	hl,3
+	call	printf
+	pop	bc
+	pop	bc
+	pop	bc
+@3:
+	ld	hl,0
+	ex	de,hl
+	ld	hl,20
+	add	hl,sp
+	ld	sp,hl
+	ex	de,hl
+	ret
+
+	dseg
+buf@:	defs	128
+?24:	defs	2
+?25:	defs	2
+	cseg
+?59991:
+	defb	74,67,46,66,65,84,0
+?59990:
+	defb	87,0
+?59989:
+	defb	99,97,110,110,111,116,32,111,112,101
+	defb	110,32,37,115,10,0
+?59988:
+	defb	10,0
+?59987:
+	defb	74,67,46,66,65,84,0
+?59986:
+	defb	0
+?59985:
+	defb	67,79,77,77,65,78,68,50,46,67
+	defb	79,77,0
+
+spawn@:
+	push	hl
+	ld	hl,65516
+	add	hl,sp
+	ld	sp,hl
+	call	?lauhl
+	defw	20+2
+	call	?sauhl
+	defw	20+2
+	ld	hl,?59991
+	ld	bc,?59990
+	push	hl
+	push	bc
+	push	hl
+	ld	hl,2
+	call	fopen@
+	pop	bc
+	pop	bc
+	ld	(?24),hl
+	ld	hl,(?24)
+	pop	de
+	ld	a,l
+	or	h
+	jp	nz,@4
+	push	de
+	ld	bc,?59989
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	ld	hl,65535
+	jp	@5
+@4:
+	call	?lauhl
+	defw	20+2
+	ex	de,hl
+	ld	hl,buf@
+	call	strcpy
+	ld	de,?59988
+	ld	hl,buf@
+	call	strcat
+	ld	hl,(?24)
+	push	hl
+	ld	hl,buf@
+	call	strlen
+	ld	c,l
+	ld	b,h
+	ld	de,1
+	ld	hl,buf@
+	call	fwrite
+	pop	bc
+	ld	(?25),hl
+	ld	hl,(?24)
+	call	fclose
+	ld	hl,?59987
+	pop	de
+	push	hl
+	ld	hl,?59986
+	call	?saut2
+	ld	hl,0
+	add	hl,sp
+	ex	de,hl
+	ld	hl,?59985
+	call	execvp
+	ld	hl,0
+@5:
+	ex	de,hl
+	ld	hl,22
+	add	hl,sp
+	ld	sp,hl
+	ex	de,hl
+	ret
+
+?59984:
+	defb	101,110,116,101,114,32,109,97,105,110
+	defb	10,0
+?59983:
+	defb	100,105,114,10,0
+?59982:
+	defb	101,120,105,116,32,109,97,105,110,10
+	defb	0
+
+main@:
+	ld	bc,?59984
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	call	getEV@
+	ld	hl,?59983
+	call	spawn@
+	ld	bc,?59982
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ret
+
+
+	public	env@
+	public	getEV@
+	extrn	getenv
+	extrn	printf
+	public	buf@
+	public	spawn@
+	extrn	fopen@
+	extrn	strcpy
+	extrn	strcat
+	extrn	fwrite
+	extrn	strlen
+	extrn	fclose
+	extrn	execvp
+	extrn	?lauhl
+	extrn	?sauhl
+	extrn	?saut2
+	public	main@
+
+	end
+

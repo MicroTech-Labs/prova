@@ -1,0 +1,65 @@
+daniel.padilla@gmail.com
+https://www.msx.org/forum/msx-talk/trading-and-collecting/msx-vsif-interface-for-mamidimemo-for-sale#comment-454216
+https://github.com/denjhang/MAmi-VSIF-for-MSX-MD/blob/main/v0.2/Schematic_VSIF%20for%20MSX%20v0.2_2024-05-18.pdf
+https://www.msx.org/forum/msx-talk/hardware/mami-vsif-for-msxmd-0
+https://ftdichip.com/wp-content/uploads/2024/03/AN232B_04_DataThroughput_LatencyandHandshaking.pdf
+https://github.com/ocitygate/joy232/tree/main
+
+---
+less ./Work/sharedFolderXP/MT-32/LAB/Contacts-Mail-Lectures/vlad/cable_eng.txt
+MSX             MAX232  25pinconnector
+1-----12        Receive 13-----3
+2-----9         Receive 8-----5
+
+6-----10        Drive   7-----2
+7-----11        Drive   14-----4
+
+9- GND? 15      ---------------7
+5- VCC- 16
+
+-----------
+ali express
+https://it.aliexpress.com/item/1005006114526852.html	FTDI
+https://it.aliexpress.com/item/1005006445462581.html	clone
+https://it.aliexpress.com/item/1005005866155123.html
+https://it.aliexpress.com/item/1005007500741661.html
+https://it.aliexpress.com/item/1005004548009754.html	piattine 9 poli
+https://it.aliexpress.com/item/1005004627682535.html	max232 modello base
+
+https://it.aliexpress.com/item/1005004947119178.html	embeddato, con connettore e cavi
+https://it.aliexpress.com/item/1005006680003013.html
+https://it.aliexpress.com/item/1005006054410966.html
+https://it.aliexpress.com/item/1005006152989196.html	con guscio, ma solo tx/rx
+
+https://it.aliexpress.com/item/1005004688257005.html	con guscio, tutti i segnali con connettore
+https://it.aliexpress.com/item/1005007732374377.html	cavo 9 poli
+https://it.aliexpress.com/item/4000210693219.html		prolunga joystick
+
+https://it.aliexpress.com/item/1005006994014979.html	modello figherrimo
+
+
+https://msx.org/forum/msx-talk/hardware/msx-link-yis-503iiir-to-rs232-adapater
+https://msx.org/forum/development/msx-development/help-needed-aux-device-and-device-handler
+
+---
+BLU
+Bus 002 Device 032: ID 4348:5523 WinChipHead USB->RS 232 adapter with Prolific PL 2303 chipset
+sembra andare TX, non va RX
+
+ROSSO Prisma: ce ne sono 2, uno a volte sembra bloccarsi ma con un power cycle funziona bene.
+L'altro cavo mi pare abbia problemi.
+Onora RTS/CTS flow control.
+Bus 002 Device 034: ID 067b:2303 Prolific Technology, Inc. PL2303 Serial Port / Mobile Action MA-8910P
+
+BIANCO MIO
+Bus 002 Device 031: ID 067b:2303 Prolific Technology, Inc. PL2303 Serial Port / Mobile Action MA-8910P
+
+BLU nuovo comprato da Ivan
+E' l'unico a funzionare con Windows 11.
+Non onora RTS/CTS flow control.
+
+
+
+
+ROSSO e BIANCO tra loro OK -> cavo incrociato OK
+https://www.prolific.com.tw/US/ShowProduct.aspx?p_id=225&pcid=41

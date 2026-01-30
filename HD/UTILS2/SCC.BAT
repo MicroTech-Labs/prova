@@ -1,0 +1,3 @@
+mode 40
+romload %1 /s
+

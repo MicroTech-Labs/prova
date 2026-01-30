@@ -1,0 +1,77 @@
+.comment %
+	(C) Copyright by MicroTech
+		All rights Reserved.
+
+Le funzioni chiamabili da C sono LABEL@::
+Le funzioni chiamabili da ASM sono _LABEL::
+
+Le variabili dichiarate (e allocate) in un .C che devono
+essere visibili da ASM vanno referenziate con
+LABEL@##
+dove ## serve ad esplicitare ad M80 che l'etichetta e' esterna
+e @ sembra essere implicitamente aggiunto alle etichette del C
+Attenzione al numero di caratteri (la @ entra nel computo dei 6 caratteri)
+%
+
+;------ Faking stuff for M80 and MX ------------------------------------
+module	macro		;; "module" must be lower cased
+	endm
+
+endmodule macro 	;; "endmodule" must be lower cased
+	endm
+
+extrn	macro
+	endm
+;-----------------------------------------------------------------------
+
+   INCLUDE CONFIG.INC
+
+
+; ***
+
+	MODULE	KBDCHK
+
+.comment %
+    IN
+    OUT A = 0 when no key is pressed
+        A = 1 when any key is pressed    
+    ACT
+	USE check for key press, reads keyboard matrix [0..10]
+%
+; TMPMAR_KEYBOARD
+kbdchk@::
+
+    di
+    ld b,10
+
+kbd_next:
+
+    in a,(0AAh)
+    and 0F0h        ; only change bits 0-3
+    or b            ; select row B
+    out (0AAh),a
+
+    in a,(0A9h)     ; read row into A
+    inc a
+    jp nz,kbd_pressed
+
+    dec b
+    jp p,kbd_next   ; jp when B >= 0
+
+    ; here when B < 0
+
+    ; no key press detected
+    xor a
+    ei
+    ret
+
+kbd_pressed:
+    ld a,1
+    ei
+    ret
+
+    ENDMODULE
+
+    end
+
+; EOF

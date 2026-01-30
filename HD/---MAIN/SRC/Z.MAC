@@ -1,0 +1,781 @@
+.comment %
+	(C) Copyright by MicroTech
+		All rights Reserved.
+
+Le funzioni chiamabili da C sono LABEL@::
+Le funzioni chiamabili da ASM sono _LABEL::
+
+Le variabili dichiarate (e allocate) in un .C che devono
+essere visibili da ASM vanno referenziate con
+LABEL@##
+dove ## serve ad esplicitare ad M80 che l'etichetta e' esterna
+e @ sembra essere implicitamente aggiunto alle etichette del C
+Attenzione al numero di caratteri (la @ entra nel computo dei 6 caratteri)
+%
+
+;------ Faking stuff for M80 and MX ------------------------------------
+module	macro		;; "module" must be lower cased
+	endm
+
+endmodule macro 	;; "endmodule" must be lower cased
+	endm
+
+extrn	macro
+	endm
+;-----------------------------------------------------------------------
+
+
+    EXTERNAL rtsH@
+    EXTERNAL rtsL@
+    EXTERNAL cts@
+    EXTERNAL dsr@
+
+    INCLUDE Z-MACRO.INC
+
+	MODULE	S
+
+    INCLUDE JCA.INC
+
+    ENDMODULE
+
+RxWaitFirst:
+
+    ld e,(ix + rxTmOutH1st)
+
+    ; check for start bit
+    in  a,(PSG_RD)          ; 11 + 3 = 14
+    rrca                    ;  4 + 1 =  5
+    jp  nc,z0RxGo           ; 10 + 1 = 11
+
+wFirst:
+
+    ld  l,(ix + rxTmOutL1st)
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+    ld  h,(ix + rxTmOutL1st + 1)
+
+    ; start from row 10
+    ; 4 + 4 + 1
+    LD_IYL_N 10
+
+wFirstLoop:
+
+    ; INNER_LOOP START
+    ; waiting for start bit or timeout
+
+    ; check for start bit
+    in  a,(PSG_RD)          ; 11 + 3 = 14
+    rrca                    ;  4 + 1 =  5
+    jp  nc,z0RxGo           ; 10 + 1 = 11   30T ~ 8,37 us
+
+    ; decrease timeout low counter
+    dec l                   ;  4 + 1 =  5
+    jp nz,wFirstLoop        ; 10 + 1 = 11   16T ~ 4,48 us   -----
+
+    ld a,(ix + disKbdCtr)   ; 19 + 1 = 20
+    or a                    ;  4 + 1 =  5    
+    jp z,first_yes_kbd      ; 10 + 1 = 11   36T ~ 10,08 us
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+    dec (ix + disKbdCtr)    ; 23 + 1 = 24
+    jp first_no_kbd         ; 10 + 1 = 11   35T ~  9,8 us
+
+first_yes_kbd:
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+    ; select keyboard row
+    in a,(0AAh)             ;     11 + 1 = 12
+    and 0F0h                ;      7 + 1 =  8
+    OR_IYL                  ;  4 + 4 + 1 =  9
+    out (0AAh),a            ;     11 + 1 = 12   41T ~ 11,48 us
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+    ; read keyboard row
+    in a,(0A9h)             ; 11 + 1 = 12
+    inc a                   ;  4 + 1 =  5
+    jp nz,z0kbd             ; 10 + 1 = 11   26T ~ 7,28 us
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+    ; prepare IYL for next row
+    DEC_IYL                 ;  4 + 4 + 1 =  9
+    jp p,row_first         ; 10 + 1 = 11
+    ; row < 0
+    ; restart from row 10
+    LD_IYL_N 10
+row_first:
+
+first_no_kbd:
+
+    dec h                   ;  4 + 1 =  5
+    jp nz,wFirstLoop        ; 10 + 1 = 11   16T ~ 4,48 us   -----
+
+    ; INNER_LOOP END
+    
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+    
+    ; decrease timeout high counter
+
+    dec e                   ;  4 + 1 =  5
+    jp nz,wFirst            ; 10 + 1 = 11   16T ~ 4,48 us
+
+    ; timeout waiting for "first" start bit
+
+    bit BIT_RTR_CTS,(ix + flowctrl)
+    jp z,wFirst_0
+    ; RTR = off
+    m_swToTx
+    m_rtsH
+    m_capsLedOff
+wFirst_0:
+
+    exx
+
+    ; save number of missing expected chars
+
+    ld  (ix + rxMissing),e
+    ld  (ix + rxMissing + 1),d
+
+    ld  a,JC_TMOUT
+    ret
+
+z0kbd:
+
+    ; keyboard activity during wait for start bit
+
+    bit BIT_RTR_CTS,(ix + flowctrl)
+    jp z,z0kbd_0
+    ; RTR = off
+    m_swToTx
+    m_rtsH
+    m_capsLedOff
+z0kbd_0:
+
+    exx
+
+    ; save number of missing expected chars
+
+    ld  (ix + rxMissing),e
+    ld  (ix + rxMissing + 1),d
+
+    ld  a,JC_LOCALKBD
+    ret
+
+
+RxWaitNext:
+
+    ld e,(ix + rxTmOutHNxt)
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+wNext:
+
+    ld  l,(ix + rxTmOutLNxt)
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+    ld  h,(ix + rxTmOutLNxt + 1)
+
+    ; IYL already setup
+;;;    ; start from row 10
+;;;    ; 4 + 4 + 1
+;;;    LD_IYL_N 10
+
+wNextLoop:
+
+    ; INNER_LOOP START
+    ; waiting for start bit or timeout
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+    ; decrease timeout low counter
+    dec l
+    jp nz,wNextLoop
+
+    ld a,(ix + disKbdCtr)   ; 19 + 1 = 20
+    or a                    ;  4 + 1 =  5    
+    jp z,next_yes_kbd      ; 10 + 1 = 11   36T ~ 10,08 us
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+    dec (ix + disKbdCtr)    ; 23 + 1 = 24
+    jp next_no_kbd          ; 10 + 1 = 11   35T ~  9,8 us
+
+next_yes_kbd:
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+    ; select keyboard row
+    in a,(0AAh)             ;     11 + 1 = 12
+    and 0F0h                ;      7 + 1 =  8
+    OR_IYL                  ;  4 + 4 + 1 =  9
+    out (0AAh),a            ;     11 + 1 = 12   41T ~ 11,48 us
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+    ; read keyboard row
+    in a,(0A9h)             ; 11 + 1 = 12
+    inc a                   ;  4 + 1 =  5
+    jp nz,z0kbd             ; 10 + 1 = 11   26T ~ 7,28 us
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+    ; prepare IYL for next row
+    DEC_IYL                 ;  4 + 4 + 1 =  9
+    jp p,row_next          ; 10 + 1 = 11
+    ; row < 0
+    ; start from row 10
+    LD_IYL_N 10
+row_next:
+
+next_no_kbd:
+
+    dec h
+    jp nz,wNextLoop
+
+    ; INNER_LOOP END
+
+    ; check for start bit
+    in  a,(PSG_RD)
+    rrca
+    jp  nc,z0RxGo
+
+    ; decrease timeout high counter
+
+    dec e
+    jp nz,wNext
+
+    ; timeout waiting for "next" start bit (not the very first)
+
+    bit BIT_RTR_CTS,(ix + flowctrl)
+    jp z,rxTimeOut
+    ; RTR = off
+    m_swToTx
+    m_rtsH
+    m_capsLedOff
+rxTimeOut:
+
+    exx
+
+    ; save number of missing expected chars
+
+    ld  (ix + rxMissing),e
+    ld  (ix + rxMissing + 1),d
+
+    ld  a,JC_TMOUT
+    ret
+
+
+;   IN  HL = buf
+;       DE = buf size (must be > 0)
+;   OUT A = OK all expected chars received
+;       A = JC_TMOUT timeout waiting for start bit, missing octets in (ix + rxMissing)
+;       A = JC_LOCALKBD local keyboard activity, missing octets in (ix + rxMissing)
+z0Rx@::
+
+    ; prepare to receive
+    exx
+
+    ld a,(ix + disKbdRld)
+    ld (ix + disKbdCtr),a
+
+    ld  c,(ix + rxDelay)
+    ld  d,(ix + rxDelayHalf)
+
+    bit BIT_RTR_CTS,(ix + flowctrl)
+    jp z,z0Rx_1
+    m_capsLedOn
+    ; RTR = on
+    m_swToTx
+    m_rtsL
+z0Rx_1:
+
+    m_swtorx
+
+    ; wait for start bit
+
+    in  a,(PSG_RD)
+    rrca
+    jp  c,RxWaitFirst
+
+    ; here when RX is LOW
+    ; AMBIGUO... non so da quanto tempo e' iniziato lo start bit
+
+    jp z0RxGo
+
+RxNext:
+
+;;; manca     bit BIT_RTR_CTS
+    ; se DE == DIMENSIONE_BUFFER_TX_UART && flowctrl == FC_RTR_RTS -> RTR = off
+    xor a
+    cp d
+    jp nz,rxn0
+    ld a,e
+    cp 1    ;20       ;16   ; DIMENSIONE_BUFFER_TX_UART del remote 
+    jp nz,rxn0
+    ; RTR = off
+    m_swToTx
+    m_rtsH
+    m_capsLedOff
+    m_swToRx
+rxn0:
+
+    exx
+
+    ; wait for start bit
+    ; RX must go LOW
+
+    in  a,(PSG_RD)
+    rrca
+    jp  c,RxWaitNext
+
+    ; AMBIGUO... non so da quanto tempo e' iniziato lo start bit
+
+;;;    jp z0RxGo
+
+z0RxGo:
+
+    DELAY_RX_HALF
+
+    DELAY_RX
+
+    ; read bit 0
+    in  a,(PSG_RD)
+    rrca
+    rr  e
+
+    DELAY_RX
+
+    ; read bit 1
+    in  a,(PSG_RD)
+    rrca
+    rr  e
+
+    DELAY_RX
+
+    ; read bit 2
+    in  a,(PSG_RD)
+    rrca
+    rr  e
+
+    DELAY_RX
+
+    ; read bit 3
+    in  a,(PSG_RD)
+    rrca
+    rr  e
+
+    DELAY_RX
+
+    ; read bit 4
+    in  a,(PSG_RD)
+    rrca
+    rr  e
+
+    DELAY_RX
+
+    ; read bit 5
+    in  a,(PSG_RD)
+    rrca
+    rr  e
+
+    DELAY_RX
+
+    ; read bit 6
+    in  a,(PSG_RD)
+    rrca
+    rr  e
+
+    DELAY_RX
+
+    ; read bit 7
+    in  a,(PSG_RD)
+    rrca
+    rr  e
+
+    DELAY_RX
+
+    ; read STOP bit
+
+    ; TMPMAR_DEBUG potrebbe essere il caso di evitarla
+    ; a 19200 con 52us di tempo di bit ed un errore di 2us
+    ; (delayrx 11 == 50us, delayrx 12 == 54us)
+    ; l'errore al 10mo bit puo' capitare se non si inizia a campionare tra +20 e +32 us
+
+    in  a,(PSG_RD)
+    rrca
+    ; Cy == 1 OK, Cy == 0 ERROR
+    jp nc,zEStop
+
+    ; NO DELAY_RX here to save time
+
+    ld  a,e
+    exx
+
+    ld  (hl),a
+    inc hl
+
+    dec de           ;  6 + 1 = 7
+    ld a,d           ;  4 + 1 = 5
+    or e             ;  4 + 1 = 5
+    jp  nz,RxNext  ; 10 + 1 = 11  28T ~ 7,8us
+
+    ; OK, all expected chars arrived
+
+    bit BIT_RTR_CTS,(ix + flowctrl)
+    jp z,z0RxOk
+    ; RTR = off
+    m_swToTx
+    m_rtsH
+    m_capsLedOff
+z0RxOk:
+
+    ld  (ix + rxMissing),e
+    ld  (ix + rxMissing + 1),d
+
+    ld a,JC_OK         ; (A already 0)
+    ret
+
+zEStop:
+    ; wrong stop bit
+
+    bit BIT_RTR_CTS,(ix + flowctrl)
+    jp z,rxErrStop
+    ; RTR = off
+    m_swToTx
+    m_rtsH
+    m_capsLedOff
+rxErrStop:
+
+    exx
+
+    ; save number of missing expected chars
+
+    ld  (ix + rxMissing),e
+    ld  (ix + rxMissing + 1),d
+
+    ld a,JC_RXERR
+    ret
+
+; called if Cy = 0: A.tx = 0, NB: Cy is reset
+z0TxZ:
+    and h
+    ret
+
+; called if Cy = 1: A.tx = 1, NB: Cy is reset
+z0TxNZ:
+    or  l
+    ret
+
+; IN HL = data ptr
+;    DE = data len (must be > 0)
+
+z0Tx@::
+
+    bit BIT_RTR_CTS,(ix + flowctrl)
+    jp z,zt_next_1      ; skip to next flowctrl method
+    ; read CTS
+    call cts@
+    or a
+    jp nz,zt_ok         ; jp when cts is on
+    ; CTS is off
+    ld a,JC_CANNOT_TX
+    ret
+zt_next_1:
+    ; add here code for other flowctrl types
+    
+zt_ok:
+
+    m_swToTx
+
+    exx
+    ld  c,(ix + txDelay)
+    ld  h,(ix + txAndMask)
+    ld  l,(ix + txOrMask)
+    exx
+
+tx_Next:
+
+    ld  a,(hl)
+    exx
+    ld  e,a
+
+    in  a,(PSG_RD)
+    and h               ; prepare A with tx = 0
+
+    scf                 ; this Cy = 1 wiil become STOP bit
+    out (PSG_WR),a      ; send start
+
+    rr  e               ; move E.0 in Cy, move Cy (STOP bit) in E.7
+    call nc,z0TxZ       ; DO NOT CHANGE ORDER!
+    call  c,z0TxNZ      ; A ready for next transmission
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 0
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 1
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 2
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 3
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 4
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 5
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 6
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 7
+
+    rr  e               ; STOP bit -> Cy
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; TX = HIGH -> sending STOP bit
+
+    rr  e               ; only for timing
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    ; STOP bit has "exited"
+    ; (in particular conditions this might be a waste of cpu time)
+
+    exx
+
+    inc hl
+    dec de
+    ld  a,d
+    or  e
+    jp  nz,tx_Next
+
+    xor a               ; JC_OK
+    ret
+
+
+; IN HL = data ptr
+;    DE = data len (must be > 0)
+;;;; trasmette 1 byte, senza sostenere lo stop bit
+;;;; ideale se:
+;;;; - e' noto di non dover trasmettere altro
+;;;; - si switcha in ricezione
+
+z0TxNS@::
+
+    bit BIT_RTR_CTS,(ix + flowctrl)
+    jp z,ztns_next_1      ; skip to next flowctrl method
+    ; read CTS
+    call cts@
+    or a
+    jp nz,ztns_ok         ; jp when cts is on
+    ; CTS is off
+    ld a,JC_CANNOT_TX
+    ret
+ztns_next_1:
+    ; add here code for other flowctrl types
+    
+ztns_ok:
+
+    m_swToTx
+
+    exx
+    ld  c,(ix + txDelay)
+    ld  h,(ix + txAndMask)
+    ld  l,(ix + txOrMask)
+    exx
+
+txns_Next:
+
+    ld  a,(hl)
+    exx
+    ld  e,a
+
+    in  a,(PSG_RD)
+    and h               ; prepare A with tx = 0
+
+    scf                 ; this Cy = 1 wiil become STOP bit
+    out (PSG_WR),a      ; send start
+
+    rr  e               ; move E.0 in Cy, move Cy (STOP bit) in E.7
+    call nc,z0TxZ       ; DO NOT CHANGE ORDER!
+    call  c,z0TxNZ      ; A ready for next transmission
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 0
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 1
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 2
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 3
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 4
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 5
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 6
+
+    rr  e
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; send bit 7
+
+    rr  e               ; STOP bit -> Cy
+    call nc,z0TxZ
+    call  c,z0TxNZ
+
+    DELAY_TX
+
+    out (PSG_WR),a      ; TX = HIGH -> sending STOP bit
+
+;;;    rr  e               ; only for timing
+;;;    call nc,z0TxZ
+;;;    call  c,z0TxNZ
+
+;;;    DELAY_TX
+
+    ; STOP bit has "exited"
+    ; (in particular conditions this might be a waste of cpu time)
+
+    exx
+
+    inc hl
+    dec de
+    ld  a,d
+    or  e
+    jp  nz,txns_Next
+
+    xor a               ; JC_OK
+    ret
+
+    end
+

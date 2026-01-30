@@ -1,0 +1,158 @@
+
+;	MSX-C ver 1.20p   (code generator)
+
+	cseg
+?59999:
+	defb	37,48,50,120,32,32,0
+
+hexdum:
+	push	hl
+	ld	c,l
+	ld	b,h
+@1:
+	dec	de
+	ld	hl,1
+	add	hl,de
+	ld	a,l
+	or	h
+	jp	z,@0
+	push	de
+	ld	a,(bc)
+	inc	bc
+	ld	hl,2
+	add	hl,sp
+	ld	(hl),c
+	inc	hl
+	ld	(hl),b
+	ld	c,a
+	ld	b,0
+	push	bc
+	ld	bc,?59999
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	pop	de
+	ld	hl,0
+	add	hl,sp
+	ld	c,(hl)
+	inc	hl
+	ld	b,(hl)
+	jp	@1
+@0:
+	ld	hl,@iob@+12
+	call	fflush
+	pop	bc
+	ret
+
+	dseg
+?24:	defs	2
+?25:	defs	2
+?26:	defs	1
+	cseg
+
+CS8@:
+	ld	(?24),hl
+	ex	de,hl
+	ld	(?25),hl
+	xor	a
+	ld	(?26),a
+@3:
+	ld	hl,(?25)
+	dec	hl
+	ld	(?25),hl
+	inc	hl
+	ld	a,l
+	or	h
+	jp	z,@2
+	ld	hl,(?24)
+	ld	a,(hl)
+	inc	hl
+	ld	(?24),hl
+	ld	hl,?26
+	add	a,(hl)
+	ld	(?26),a
+	jp	@3
+@2:
+	ld	a,(?26)
+	ret
+
+	dseg
+?31:	defs	2
+?32:	defs	2
+?33:	defs	2
+?34:	defs	1
+	cseg
+
+calcrc:
+	ld	(?31),hl
+	ex	de,hl
+	ld	(?32),hl
+	ld	hl,0
+	ld	(?33),hl
+@5:
+	ld	hl,(?32)
+	dec	hl
+	ld	(?32),hl
+	inc	hl
+	ld	a,l
+	or	h
+	jp	z,@4
+	ld	hl,(?31)
+	ld	a,(hl)
+	inc	hl
+	ld	(?31),hl
+	ld	b,a
+	ld	c,0
+	ld	hl,(?33)
+	ld	a,c
+	xor	l
+	ld	l,a
+	ld	a,b
+	xor	h
+	ld	h,a
+	ld	(?33),hl
+	xor	a
+	ld	(?34),a
+@8:
+	ld	a,(?34)
+	cp	8
+	jp	nc,@5
+	ld	hl,(?33)
+	ld	a,h
+	and	128
+	jp	z,@6
+	ld	hl,(?33)
+	add	hl,hl
+	ld	a,l
+	xor	33
+	ld	l,a
+	ld	a,h
+	xor	16
+	ld	h,a
+	ld	(?33),hl
+	jp	@7
+@6:
+	ld	hl,(?33)
+	add	hl,hl
+	ld	(?33),hl
+@7:
+	ld	a,(?34)
+	inc	a
+	ld	(?34),a
+	jp	@8
+@4:
+	ld	hl,(?33)
+	ret
+
+
+	public	hexdum
+	extrn	printf
+	extrn	fflush
+	extrn	@iob@
+	public	CS8@
+	public	calcrc
+
+	end
+

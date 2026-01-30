@@ -1,0 +1,123 @@
+
+
+                >> PROTOCOL.DOC <<
+
+        One of the most interesting things about a
+computer and a modem, is the exchange of public domain
+files and programs over the telephone. A number of
+handshaking standards or 'protocols' have been developed
+to make this possible. One of the most important and
+widely used is the 'XMODEM' protocol (sometimes called
+'MODEM7' protocol; or 'Christensen' protocol, after its
+originator, Ward Christensen). The XMODEM protocol makes
+it possible for many different kinds of computers to
+communicate with each other via modem and telephone.
+Since a noisy phone connection may cause transmission
+errors, the XMODEM protocol can recognize and correct
+for errors when they occur. The XMODEM protocol has been
+upgraded several times since its invention about 10
+years ago. However, all the upgrades are 'downward
+compatible' with earlier versions, so that even very
+simple programs can use it. 
+        Data to be transferred may contain up to 8 bits
+per byte (that is why we can transfer '.COM' files). The
+data is sent in 128 byte clusters called 'packets'
+(later versions of XMODEM can also transfer 1 k byte
+packets). Each packet is checked for errors and if an
+error is found, the packet is sent again. The packet has
+a 'header' which is sent at the beginning, and a 'tail'
+which is sent at the end. That is, data is sent in the
+form:
+     HEADER / PACKET / TAIL ...(repeat for each packet).
+
+The protocol uses several ASCII 'control codes' to run
+the process --
+        ACK  (ACKNOWLEDGE, 06 hex, control-F)
+        CAN  (CANCEL, 18 hex, control-X)
+        EOT  (END OF TRANSMISSION, 04 hex, control-D)
+        NAK  (NEGATIVE ACKNOWLEDGE, 15 hex, control-U)
+        SOH  (START OF HEADING, 01 hex, control-A)
+        STX  (START OF TEXT, 02 hex, control-B).
+
+
+THE HEADER
+        The header consists of an SOH control code
+marker, followed by a 1 byte packet number (1, 2, 3
+etc.), and then the two's complement or 'NOT' of the
+number (that is, the bits are reversed -- 1's are 0's,
+0's are 1's). If these three elements are added together
+they should equal zero, and that is one way to check for
+transmission errors at the receiving end.
+
+THE TAIL
+        The tail consists of a 1 byte checksum, or
+alternately, a 2 byte CRC.
+
+CHECKSUM and CRC
+        The checksum and CRC are used to detect errors.
+The receiving computer calculates the checksum or CRC of
+data it has received and compares it with that from the
+sending computer. If they match, data is OK. If they do
+not match, an error is indicated.
+        The checksum is obtained by adding all the bytes
+of the header and packet together (ignoring carry).
+The checksum can catch 99.6 % of the errors.
+        The CRC (cyclic redundancy code) requires a more
+complicated calculation involving multiplication of the
+bytes, but it can catch 99.9 % of the errors. Thus the
+use of CRC is preferred. Many systems give you the
+option of selecting either checksum or CRC.
+
+HANDSHAKING
+The entire process is initated by the receiving
+computer when it signals the sender to begin. That,
+and the way errors are handled, is why the XMODEM
+protocol is known as a 'receiver driven' protocol. To
+begin the process, the receiver may send any of three
+different characters --
+        NAK -- indicates protocol with checksum,
+        'C' -- (capital 'C') protocol with CRC,
+        'K' -- (capital 'K') 1 k packet protocol.
+The sender then sends the first data packet.
+        If the receiver receives the packet of data
+without errors (using checksum or CRC), it sends a ACK
+control code to the sender, and the next packet is
+transmitted. Otherwise, if an error was detected, the
+receiver sends a NAK control code to the sender and the
+same packet is transmitted again. This continues until
+all the data has been sent. End of data is indicated
+when the sender transmits a EOT control code and the
+receiver answers with an ACK.
+
+1 K PROTOCOL
+        More recently, another optional upgrade was
+added to the XMODEM protocol which permits 1 k byte
+packets (ie. 1024 bytes). This 1 k option always uses
+CRC (never checksum). The use of 128 byte data packets
+was a logical beginning because single density CP/M uses
+128 byte sectors. However, much of the transmission time
+involved in the XMODEM protocol consist of handshaking.
+This is especially significant at the higher baud rates
+(such as 2400 baud) and for long distance because of
+transmission delay (especially via satelite). Thus the
+use of a larger 1 k data packet can reduce transmission
+time somewhat, especially at the higher baud rates.
+However, the 128 byte data packet is faster if the phone
+connection is noisy. (If an error occurs in a 1 k byte
+packet retransmission takes 8 times as long as a 128
+byte packet). Most 1 k software downshifts the sender
+automatically to 128 byte packets if excessive errors
+are detected; it also shifts down when the remaining
+sectors to be transmitted are fewer than 8. The sender
+indicates it is sending a 1 k byte packet by using STX
+instead of SOH in the header.
+
+
+        The XMODEM protocol also includes provision for
+a CAN (control-X) 'panic button' to abort the
+transmission. 
+
+
+                            -- Phillip Hansford, 123085
+
+

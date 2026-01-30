@@ -1,0 +1,215 @@
+
+;	MSX-C ver 1.20p   (code generator)
+
+	dseg
+?12:	defs	2
+?13:	defs	2
+?14:	defs	2
+	cseg
+?59999:
+	defb	87,66,0
+?59998:
+	defb	99,97,110,110,111,116,32,111,112,101
+	defb	110,32,37,115,10,0
+?59997:
+	defb	49,50,51,32,112,114,111,118,97,10
+	defb	101,32,112,111,105,0
+?59996:
+	defb	114,101,116,86,97,108,117,101,32,61
+	defb	32,37,100,10,0
+?59995:
+	defb	102,101,114,114,111,114,32,61,32,37
+	defb	115,10,0
+?59994:
+	defb	84,82,85,69,0
+?59993:
+	defb	70,65,76,83,69,0
+
+test@:
+	ld	(?12),hl
+	ld	bc,1024
+	push	bc
+	ld	bc,?59999
+	push	bc
+	ld	hl,(?12)
+	push	hl
+	ld	hl,3
+	call	fopen@
+	pop	bc
+	pop	bc
+	pop	bc
+	ld	(?13),hl
+	ld	hl,(?13)
+	ld	a,l
+	or	h
+	jp	nz,@0
+	ld	hl,(?12)
+	push	hl
+	ld	bc,?59998
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	ld	a,255
+	ret
+@0:
+	ld	hl,(?13)
+	push	hl
+	ld	bc,1024
+	ld	de,1
+	ld	hl,?59997
+	call	fwrite
+	pop	bc
+	ld	(?14),hl
+	ld	hl,(?14)
+	push	hl
+	ld	bc,?59996
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	ld	hl,(?13)
+	inc	hl
+	ld	a,(hl)
+	and	8
+	jp	z,@1
+	ld	hl,?59994
+	jp	@2
+@1:
+	ld	hl,?59993
+@2:
+	push	hl
+	ld	bc,?59995
+	push	bc
+	ld	hl,2
+	call	printf
+	pop	bc
+	pop	bc
+	ld	hl,(?13)
+	ld	a,l
+	or	h
+	ret	z
+	ld	hl,(?13)
+	call	fclose
+	ret
+
+?59992:
+	defb	101,110,116,101,114,32,115,97,109,112
+	defb	108,101,50,10,0
+?59991:
+	defb	83,72,69,76,76,0
+?59990:
+	defb	110,111,32,83,72,69,76,76,10,0
+?59989:
+	defb	80,82,79,71,82,65,77,0
+?59988:
+	defb	110,111,32,80,82,79,71,82,65,77
+	defb	10,0
+?59987:
+	defb	80,65,82,65,77,69,84,69,82,83
+	defb	0
+?59986:
+	defb	110,111,32,80,65,82,65,77,69,84
+	defb	69,82,83,10,0
+?59985:
+	defb	37,115,32,45,32,37,115,32,45,32
+	defb	37,115,10,0
+?59984:
+	defb	101,120,105,116,32,115,97,109,112,108
+	defb	101,50,10,0
+
+main@:
+	push	bc
+	push	bc
+	push	bc
+	ld	bc,?59992
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	hl,?59991
+	call	getenv
+	push	hl
+	ld	a,l
+	or	h
+	jp	nz,@3
+	ld	bc,?59990
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	hl,0
+	call	exit@
+@3:
+	ld	hl,?59989
+	call	getenv
+	call	?saut2
+	ld	a,l
+	or	h
+	jp	nz,@4
+	ld	bc,?59988
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	hl,0
+	call	exit@
+@4:
+	ld	hl,?59987
+	call	getenv
+	call	?saut4
+	ld	a,l
+	or	h
+	jp	nz,@5
+	ld	bc,?59986
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	hl,0
+	call	exit@
+@5:
+	pop	hl
+	push	hl
+	call	?laut2
+	push	hl
+	call	?laut6
+	push	hl
+	ld	bc,?59985
+	push	bc
+	ld	hl,4
+	call	printf
+	pop	bc
+	pop	bc
+	pop	bc
+	pop	bc
+	ld	bc,?59984
+	push	bc
+	ld	hl,1
+	call	printf
+	pop	bc
+	ld	hl,0
+	call	exit@
+	pop	bc
+	pop	bc
+	pop	bc
+	ret
+
+
+	public	test@
+	extrn	fopen@
+	extrn	printf
+	extrn	fwrite
+	extrn	fclose
+	public	main@
+	extrn	getenv
+	extrn	exit@
+	extrn	?saut2
+	extrn	?saut4
+	extrn	?laut2
+	extrn	?laut6
+
+	end
+

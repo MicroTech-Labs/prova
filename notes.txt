@@ -1,0 +1,875 @@
+bottom  https://www.msx.pics/image/wT6zm
+front   https://www.msx.pics/image/wT75z
+side    https://www.msx.pics/image/wTTYS
+top     https://www.msx.pics/image/wTDR4
+
+logic-analyzer  https://www.msx.pics/image/wTbvr
+
+modem-bottom    https://www.msx.pics/image/wTd1C
+modem-top       https://www.msx.pics/image/wTKxQ
+
+https://github.com/MicroTech-Labs
+MicroTech-Labs
+gitHubPwd_____64_0
+
+Emily Fiorentini                    @Emily82
+Member since November 06, 2018      emily@xewer.com
+    https://gitlab.com/Emily82/debugger-debug.com-for-msx
+spunti associati:
+    https://www.kawa.net/msx/download-e.html#debug041
+    https://thestarman.pcministry.com/asm/debug/debug2.htm
+    https://msx.org/forum/msx-talk/development/debug-your-msx-with-vscode
+
+Per fare commenti multi riga
+.comment %
+	(C) Copyright by MicroTech
+		All rights Reserved.
+%
+
+
+M80:
+- i simboli in .MAC chiamabili da .C sono LABEL@::
+- i simboli in .MAC chiamabili da un altro .MAC sono _LABEL::
+e devono essere esplicitate dla chiamante con
+    extrn _LABEL
+- i simboli in .MAC devovo avere :
+
+Le variabili dichiarate (e allocate) in un .C che devono
+essere visibili da ASM vanno referenziate con
+LABEL@##
+dove ## serve ad esplicitare ad M80 che l'etichetta e' esterna
+e @ sembra essere implicitamente aggiunto alle etichette del C
+Attenzione al numero di caratteri (la @ entra nel computo dei 6 caratteri)
+Il carattere '_' delle label C e' sostituito da '@' nella stessa label referenziata in .MAC
+
+C:         ASM:
+C_RET   -> C@RET@:
+
+simbolo globale in 1.MAC
+rts@::
+per essere referenziato da 2.MAC deve esservi "esposto" come:
+    external rts@
+ed invocato cosi':    
+    call rts@
+
+compilazione .C:
+    - label code locali cominciano sempre con @1, il numero incrementa
+    - stringhe locali finiscono nel segmento code, cominciano sempre con ?59999
+    ed il numero decrementa
+    - label data locali cominciano sempre con ?1, il numero incrementa
+
+;------ Faking stuff for M80 and MX ------------------------------------
+module	macro		;; "module" must be lower cased
+	endm
+
+endmodule macro 	;; "endmodule" must be lower cased
+	endm
+
+extrn	macro
+	endm
+
+Con MSX-C retCode puo' essere conveniente:
+0 = ok
+< 0 errore di sistema
+> 0 errore del proprio applicativo
+
+Con M80, sembra che le
+    INCLUDE <nomefile>
+debbano essere distanziate da almeno 1 riga vuota
+
+
+;-----------------------------------------------------------------------
+
+https://msx.org/forum/development/msx-development/z80-timing
+http://map.tni.nl/resources/z80instr.php
+
+sembra che:
+- ia80
+    $ equivale al program counter della prossima istruzione
+- m80
+    $ equivale al program counter dell'istruzione attuale
+
+'U' = 85 = 0x55
+TODO
+    - non c'e' check che una retx sia coerente con la prima tx
+    - la prima stringa trasmessa ha sempre errori
+    - z0tmoutL potrebbe essere ottimizzabile con "trucchi" grawl
+    - rLock/rUnlock (device) fungono code critical section mutex
+    oltre che interrupt lock section, quindi e' possibile
+    rimuovere device da:
+        swToTx(device);
+        swToRx(device);
+    poiche' device e' implicitamente ix
+    - all'inizio ed al termine invocare GICINI
+
+CONSOLE
+    - aggiunta opzione -o
+    - per ora imposto default speed 19200 e port 1
+JC
+    - valorizza rxMissing anche nel caso JC_OK
+    - jcCICP (ConIn Copy & Paste)
+
+MKDIR H:¥TMP
+SET TEMP=H:¥TMP
+
+https://www.msx.org/forum/msx-talk/development/msx-terminal
+
+https://retrocomputing.stackexchange.com/questions/31473/reading-a-key-in-msx-without-blocking
+https://map.grauw.nl/articles/keymatrix.php
+
+CHSNS
+Address  : #009C
+Function : Tests the status of the keyboard buffer
+Output   : Zero flag set if buffer is empty, otherwise not set
+Registers: AF
+
+CHGET
+Address  : #009F
+Function : One character input (waiting)
+Output   : A  - ASCII code of the input character
+Registers: AF
+    FDC2h 	H.CHGE 	Call: At the beginning of the routine CHGET (Main-ROM at 009Fh) to read a character on the keyboard.
+    Usage: Allow access to other devices than the MSX keyboard. 
+
+CHPUT
+Address  : #00A2
+Function : Displays one character
+Input    : A  - ASCII code of character to display
+    FDA4h 	H.CHPU 	Call: At the beginning of the routine CHPUT (Main-ROM at 00A2h) to display a character on the screen.
+    Usage: Allows the use of a device other than a screen.
+    Note: Register A contains the character code when this Hook is called. 
+
+RSVMEM.C reload MSXDOS2.SYS (ma swap memory ridotta)
+"prototipi" da Ivan
+jcRTS, jcCTS
+
+_FOOT_PRINT_ per ridurre dimensione code/data
+
+migliorie
+- passare argc/argv a CONSOLE quando viene rilanciato in JC.BAT
+- jcRxTO poter imporre anche tmoutL sapendo che 250 corrisponde a 4ms
+
+
+account Medium : pepito mobile
+email           solita gmail
+
+--------------------------------------
+storage
+char buf[] = "He12\n\0\0 lhdfv---0llo World";
+
+    /* printf("received block %u -> ACK\n", (U16) nBlk8); */
+    /* save block */
+    for (n = 3; n < 131; n++)
+        putc((char) rxBuf[n], fp);
+
+https://github.com/Konamiman/NestorWeb/blob/master/crt0msx_msxdos2_fork.asm
+anonymous Lavandeira Javi Agony - incognito ergo sum
+https://msx.org/forum/msx-talk/development/msx-c-qa-official-thread?page=25
+https://github.com/javilm/malloc
+https://github.com/sndpl/msx-c-examples
+https://www.fvue.nl/wiki/MSX-C_manual
+
+
+variabili di sistema
+https://www.msx.org/wiki/System_variables_and_work_area
+hook
+https://www.msx.org/wiki/System_hooks
+How to reallocate MSXDOS2.sys without going to basic or using basic
+https://www.msx.org/wiki/How_to_reallocate_MSXDOS2.sys_without_going_to_basic_or_using_basic
+COMMAND2.COM starts at #99D4? 
+https://www.msx.org/forum/msx-talk/development/command2com-starts-at-99d4
+How can memory in page 3 be reserved (once forever)?
+https://msx.org/forum/development/msx-development/how-can-memory-page-3-be-reserved-once-forever
+
+YF349 or HIMSAV is used to store the value of HIMEM set by the MSX disksystem.
+    It is being used to initialize HIMEM again when DiskBASIC is being started.
+    The first versions of the diskrom (like the Philips YV-0010) did not take into account that
+    an expansion could hook H.CLEA which could reserve some extra BASIC memory and therefor lowering HIMEM.
+    HIMSAV was not updated to reflect this change.
+    Later versions of the diskrom check for a hooked H.CLEA and hook H.LOPD to update HIMSAV to reflect a possible lowering of HIMEM.
+    Hope this helps. 
+
+F674h 	STKTOP 	2 	Top location to be used for the stack
+FC48h 	BOTTOM 	2 	Address of the beginning of the available RAM area
+FC4Ah 	HIMEM 	2 	Address of the end of the available RAM area 
+
+
+
+                    crc1 = crc16((U8 *) &rxBuf[3], (U16) 0, (size_t) 1024);
+                    crc2 = rdBE16(&rxBuf[3 + 1024]);
+/*
+                    pCrc = (U8 *) &rxBuf[3 + 1024];
+                    crc2 = ((U16) *pCrc) << 8;
+                    pCrc++;
+                    crc2 |= *pCrc;
+*/
+                    if (crc1 == crc2)
+*******
+                    if (0 == crcaio((U8 *) &rxBuf[3], (U16) 0, (size_t) 128))
+
+
+---
+
+250128 MA
+iniziato supporto per timing == 0, s0Rx ed s0Tx vanno specializzate
+perche' ora usano istruzioni STL/TH
+
+embeddare un jp in s0Rx/s0Tx e farle diventare Rx e Tx
+
+simboli strategici
+s0Rx@::s0rx
+s0Tx@::
+s0TxC@::
+
+250202 DO
+
+- clonato s.mac in z.mac, replace s0 con z0
+- acrobat.mk: aggiunto z
+- lasciati solo timing 0 (z80) e 1 (system timer)
+- sostituiti riferimenti a s0 con z0 in main.c ma non in xm.c
+- z0Tx sostituiti STL/STH con loop del tipo
+
+ 1/1200 = 1 bit ogni 833.333 us
+ 1/2400 = 1 bit ogni 416.666 us
+ 1/4800 = 1 bit ogni 208.333 us
+ 1/9600 = 1 bit ogni 104.166 us
+1/19200 = 1 bit ogni  52.083 us
+1/38400 = 1 bit ogni  26.041 us   (non supportato dal usb-to-rs232 che funziona con Windows 11)
+
+
+msx -> vcom sembra ok a 2400
+tb = 106 produce durata di 1 bit pari a circa 1700us
+usando tb del 9600 (26) ottengo circa 1/4 di 1700us ossia circa 425us, vicino ai 416us teorici richiesti dal 2400 bps
+
+425us / 26 ~= 16.346 us
+
+; DELAY_EX_SP_HL
+; delay 1 bit, versione con ex (sp),hl
+    ex (sp),hl      19 + 1
+    ex (sp),hl      19 + 1
+    dec e            4 + 1
+    jp nz,$-3       10 + 1
+
+    3,58 MHz -> 1T ~ 280ns
+                    52 + 4 = 56 T -> 56 * 280ns = 15.624us che sembra abbastanza coerente
+                    (ci sono le altre istruzioni oltre al loop di ritardo)
+
+    switch (pParam->speed)
+    {
+        case 2:  td =   3;   break;      /* 19200   3,333 */
+        case 2:  td =   6;   break;      /*  9600   6,667 */
+        case 1:  td =  13;   break;      /*  4800  13,334 */
+        case 0:  td =  26;   break;      /*  2400  26,668 */
+    }
+
+; DELAY_DEC_E
+; delay 1 bit
+    dec e            4 + 1
+    jp nz,$-1     10 + 1
+
+    3,58 MHz -> ~ 280 ns
+                    14 + 2 = 16 T -> 16 * 280ns = 4.480us che sembra abbastanza coerente
+                    (ci sono le altre istruzioni oltre al loop di ritardo)
+    3579545 Hz -> 279 ns
+    switch (pParam->speed)
+    {
+        case 3:  td =  11-1;   break;      /* 19200  11,625 */
+        case 2:  td =  23-1;   break;      /*  9600  23,25 */
+        case 1:  td =  46-1;   break;      /*  4800  46,50 */
+        case 0:  td =  93-1;   break;      /*  2400  93.005 */
+    }
+
+
+    ; register map allocation usage
+
+    ; RX
+    ; IN  HL = buf
+    ;     DE = buf size (must be > 0)
+    ;     (ix + rxTmOutH)   timeout in seconds
+    ;     (ix + rxTmOutL)   timeout for ~ 1 second
+    ;     (ix + rxTmOutHNext)   timeout in 4ms units
+    ;     (ix + rxTmOutLNext)   timeout for ~ 4ms
+    ;
+    ;       B' = 1-bit-delay decrement counter
+    ;       C' = 1-bit-delay value
+    ;       D' = half-bit-delay value
+    ;       E' = rxTmOutH/rxTmOutHNext, then receive accumulator
+    ;      HL' = rxTmOutL/rxTmOutLNext
+    ;     IYL  = keyboard row
+    ; OUT  A = result
+
+    ; TX
+    ; IN HL = buf
+    ;    DE = buf size (must be > 0)
+    ;
+    ;       A  = R15 mirror
+    ;       B' = 1-bit-delay decrement counter
+    ;       C' = 1-bit-delay value
+    ;       E' = byte to transmit
+    ;       H' = and mask
+    ;       L' = or mask
+
+    acrobat -s2 -p0 -t0
+
+250213 GI
+psgStart/psgStop commentato salvataggio/ripristino psg R14 e psg R15
+
+corretto 0x27 -> 27 per check tasto ESC
+ok 2400 sia tx che rx, a 4800 meno, a 9600 non funziona
+
+sostituiti loop delay 1 bit con macro
+DELAY_EX_SP_H vs DELAY_DEC_E
+
+BU250224
+
+- trasmissione
+    - usa A come mirror R#15
+    - usa E come byte da trasmettere
+
+- DELAY_TX
+    usa B per delay
+
+    out (PSG_WR),a      ; 11 + 1 = 12
+
+    rr  e               ;  8 + 1 =  9
+    call nc,z0TxZ       ; 17 + 1 = 18
+        and h           ;  4 + 1 =  5
+        ret             ; 10 + 1 = 11
+    call  c,z0TxNZ      ; 10 + 1 = 11
+        or  l           ;  4 + 1 =  5
+        ret             ; 10 + 1 = 11
+
+    ; DELAY_TX
+    ld  b,c             ;  4 + 1 =  5
+    djnz $              ;  8 + 1 =  9 (when B == 0)
+                        --------------
+                                   96T * 279ns = 26819ns
+                        ; 13 + 1 = 14 (when B != 0)
+                        --------------
+                        + 14T * 279ns =  3906ns * (B - 1)
+    granularita' 3.906 us
+
+    ; preso da ser57600
+	LD A,D          ; 4+1
+	JR C,.SETBIT    ; 12+1 se salta
+                    ; 7+1 se tira dritto
+;NO, BIT=0		
+	LD A,E          ; 4+1
+.SETBIT:	
+
+1200 = 1 bit ogni 833.333 us
+    833333 - 26819 = 806514
+    806514 / 3906 = 206,48 + 1 -> 207
+
+2400 = 1 bit ogni 416.666 us
+    416666 - 26819 = 389847
+    389847 / 3906  = 99,80 + 1 -> 101   OK
+
+4800 = 1 bit ogni 208.333 us
+    208333 - 26819 = 181514
+    181514 / 3906  = 46,47 + 1 -> 48    OK
+
+9600 = 1 bit ogni 104.166 us
+    104166 - 26819 = 77347
+    77347 / 3906  = 19,80 + 1 -> 22     OK
+
+19200 = 1 bit ogni  52.083 us
+    52.083 - 26819 = 25264
+    25264 / 3906 = 6,46 -> 8            OK
+
+trasmissione sembra ok fino a 19200
+38400 teoricamente non possibile con l'attuale loop di ritardo
+
+- DELAY_RX
+
+    in  a,(PSG_RD)      ; 11 + 1 = 12
+    rrca                ;  4 + 1 =  5
+    rr  e               ;  8 + 1 =  9
+
+    ld  b,c             ;  4 + 1 =  5
+    djnz $              ;  8 + 1 =  9 (when B == 0)
+                        --------------
+                                   40T * 279ns = 11160ns
+                        ; 13 + 1 = 14 (when B != 0)
+                        --------------
+                        + 14T * 279ns =  3906ns * (B - 1)
+    granularita' 3.906 us
+
+
+- DELAY_RX_HALF
+    ld  b,c             ;  4 + 1 =  5
+    srl b               ;  8 + 1 =  9
+    djnz $              ;  8 + 1 =  9 (when B == 0)
+
+- DELAY_RX_HALF
+    ld  b,c             ;  4 + 1 =  5
+    srl b               ;  8 + 1 =  9
+    srl b               ;  8 + 1 =  9
+    djnz $              ;  8 + 1 =  9 (when B == 0)
+                                   32T quando B==1 (minimo) = 8,928 us
+                        ; 13 + 1 = 14 (when B > 0)
+                        --------------
+                        + 14T * 279ns =  3906ns * (B - 1)
+    9us + 4us * (B - 1)
+    a 19200 B vale 11 -> B >> 2 = 2
+    quindi DELAY_RX_HALF = 9 + 4 = 13us
+
+
+
+1200 = 1 bit ogni 833.333 us
+    833333 - 11160 = 822173
+    822173 / 3906 = 210,48 + 1 -> 211       213 sembra OK, orse DELAY_RX_1ST potrebbe migliorare
+
+2400 = 1 bit ogni 416.666 us
+    416666 - 11160 = 405506
+    405506 / 3906 = 103,816 + 1 -> 106  OK
+
+4800 = 1 bit ogni 208.333 us
+    208333 - 11160 = 197173
+    197173 / 3906  = 50,47 + 1 -> 51 OK
+
+9600 = 1 bit ogni 104.166 us
+    104166 - 11160 = 93006
+    93006 / 3906  = 23,81 + 1 -> 25 OK
+    
+19200 = 1 bit ogni  52.083 us
+    52.083 - 11160 = 40923
+    40923 / 3906 = 10,47 -> 11 OK
+
+DELAY_RX_HALF
+z0RxWaitStart vs z0RxWaitStartTm
+
+
+ok porta joy B
+
+250314 A2-DEBUG.COM
+
+tx  rx  verificati con Logic Analyzer
+-------
+22  25       9600
+8   11      19200
+
+
+A2Init() impone TX = HIGH
+
+trovato errore in setTxHigh
+setTxHigh -> TxH
+
+DELAYX DEPENDENT
+
+2400/4800/9600/19200 sembra soddisfacentemente ok
+
+aggiunto rxMissing nel caso rx timeout
+
+
+rework XMReceive()
+WaitBuf() sembra ok
+TeraTerm sembra ganzo
+XMReceive rimane freezzato su 1chipMSX, sembra andare su blueMSX, era rimasta una s0Rx
+
+aggiunto test su stop bit in ricezione... da verificare
+perche' a 19200 si riceve 0x01 (corretto), numero di blocco e' a volte raddoppiato, mentre il suo negato e' corretto
+BU 250417
+
+250420
+prova rimozione device da swToTx(device) e swToRx(device)
+TxC0@   trasmette 1 byte senza sostenere stop bit
+
+
+; TMPMAR_DEBUG
+- suggerimento togliere una delay rx 1 4
+- modifica uso D per DELAY_RX_HALF
+in pratica le DELAY_xX
+durano 
+con B = 1 (minimo) = 14T
+con B > 1          = 14T * B
+apparentemente uniforme e "semplice" perche' il delay ha granularita' fissa 3.906 us
+per ora rxdelayhalf vale come rxDelay
+
+uso DELAY_RX_HALF nuova
+rxdelayhalf = 1 per 19200
+provo con 2 stop bit
+
+
+----S01234567ES01234567E
+    01000000010
+.....^
+
+SES-232-250501-BU
+xmodem rx checksum sembra ok anche a 19200
+
+aggiunto xmodem crc, da ottimizzare e verificare comportamento tmout durante l'advertising di 'C'
+dovrebbe terminare e "scalare" a chksum
+
+XMODEM: specializzati errori e resi U8
+
+per ora nTryC = 10 ed m_TmOut = 10
+A2RxTO = 2 sia per xmodem crc che checksum
+
+A2Init ed A2Del invocano gicini()
+
+
+A2 -> JC
+MAIN -> FRX
+SIEVE.C -> SAMPLE1.C
+provo a cambiare base tempi di INNER_LOOP, rimosso DELAYX DEPENDENT
+joyCOM-250528
+-------------
+
+rework label
+250529...
+
+- rxTmOutH/L Next sembra ok
+- XMRx1kCRC sembra ok
+    - senza calcolo crc si sfiorano 1,8KB/s
+    - commentata la sezione checksum per overflow compilatore
+joyCOM-BU250531
+
+condizionate printf() con define XMDBG per riuscire a compilare
+
+crc16 in assembly
+
+rxBuf e contatori di errori (e_xxxxx) resi static monoistanza
+
+peBadSeq()
+peUndRun()
+peTmOut()
+peProt()
+peStop()
+peChkCRC() -> compila!
+
+commentate fwrite TMPMAR_DEBUG ---> non si blocca!!!!
+    ipotizzo o problema fwrite o l'aver reso il buffer di ricezione static (quindi sicuramente non in page 3)
+    spostato rxBuf sullo stack -> non va
+    ripristinata write() -> va... !?
+
+commentato un ramo per limite compilatore TMPMAR_DEBUG
+
+- stacco riattacco cavo sembra ok
+- ritoccate opzioni compilazione
+- fopen write fclose: non viene scritto niente su disco (sia rxbuf sia in page 0 che in page 3)
+- fopen fwrite fclose: l'ultima volta si inceppava dopo qualche blocco
+- -fFILENAME
+
+- read e write richiedono parametro FD, non FP
+- retx sembra ok
+- split iniziale dei sorgenti
+    .H ->   IFUNC   IVARS   IDEF
+                    VARS    DEF
+    .C  ->          VARS
+            0,1,...
+
+    .MAC
+    .INC
+- XMCRC: rxBuf sullo stack
+- jxRxTO next da 8ms -> 4ms
+sembra ok (a parte il caso checksum 1K che non so se sia da supportare)
+joyCOM-250621-BU
+----------------
+
+tentativo in xmrxcrc di usare switch al posto di if nidificati
+"spalmate" qualche funzionalita' in sub functions
+CG sembra produrre meno '.'
+
+xmrxcrc: aggiunta hexdump per blocco 0 solo per debug
+
+e
+JC.BAT:
+    <comando>
+    SET JC=JOIN
+    CONSOLE
+
+CONSOLE.C
+    if JC == "JOIN"
+        print stdout/stderr
+        rm stdout/stderr
+        JC=""
+    cmd = prompt()
+
+    open JC.BAT
+        appendi "<comando>"
+        appendi "set JC="JOIN"
+        appendi "CONSOLE"
+    argv[0] = "JC.BAT";
+    argv[1] = "";
+    execvp("COMMAND2.COM", argv);
+
+
+prove flow control hw, mica funziona...
+ne' con tera term (Windows) ne' con minicom (Linux)
+rtsH(), rtsL(), cts()
+aggiunto flowctrl
+
+
+** DATE 250916 MA
+
+- aggiungere supporto per flowctrl
+jcRxC()
+jcRxBuf()
+    z0Rx
+
+jcTxC
+jcTxS
+    z0Tx
+
+TxC0(); sostituite con z0Tx
+
+- swToRx() e swToTx() svuotate
+
+z0Rx aggiungere assert/deassert RTS
+z0Tx aggiungere test CTS, in teoria potrebbe terminare per timeout
+
+o si usano funzioni esposte in JC.H
+o si usa jcLock() -> funzioni esposte in JCIFUNC.H -> jcUnlock()
+_CritSect
+
+TMPMAR_KEYBOARD
+- chat sembra ok, aggiunti JC_REMOTEBRK, JC_LOCALBRK, JC_LOCALKBD
+*** joyCOM-251001   con shift + rtc/cts flowctrl in rx, chat sembra ok
+
+
+flowctrl 1 -> no flowctrl, 2 RTR/CTS, 4 DTR/DSR. 8 RTS/CTS
+
+TMPMAR_FASTLOOP
+
+; INNER_LOOP era
+
+__Loop
+    ; check for start bit
+    in  a,(PSG_RD)          ; 11 + 3 = 14
+    rrca                    ;  4 + 1 =  5
+    jp  nc,z0RxGo           ; 10 + 1 = 11   30T ~ 8,37 us
+
+    dec hl                  ;  6 + 1 =  7
+    ld a,h                  ;  4 + 1 =  5
+    or l                    ;  4 + 1 =  5
+    jp  nz,__Loop           ; 10 + 1 = 11   28T ~ 7,8us
+
+la base tempi e' 16,17 us
+moltiplicato per 250 -> ~ 4,042 ms
+
+; INNER_LOOP diventa
+
+    ; check for start bit
+    in  a,(PSG_RD)          ; 11 + 3 = 14
+    rrca                    ;  4 + 1 =  5
+    jp  nc,z0RxGo           ; 10 + 1 = 11   30T ~ 8,37 us
+
+    ; decrease timeout low counter
+    dec l                   ;  4 + 1 =  5
+    jp nz,wFirstLoop        ; 10 + 1 = 11   16T ~ 4,48 us
+
+la base tempi e' 12,85
+moltiplicato per 250 -> ~ 3212,5 ms
+
+
+
+
+start bit teoricamente e' "sempre" detectato entro 20 us
+uso IYL per riga tastiera perche' D' era delay rx half
+
+z0Tx e di conseguenza jxTxS() e jcTxC() restituiscono STATUS:
+per ora JC_OK (se flowctrl == 0) o JC_CANNOT_TX (se flowctrl == RTR_CTS)
+
+XM non necessita di flowctrl essendo il protocollo stesso "turn based".
+
+flowctrl:
+#define FC_NONE FC_RTR_CTS
+equ     0       1 << BIT_RTR_CTS
+
+RxNext
+per ora aggiunto test per rtr -> off senza considerare flowctrl
+
+minicom:
+- paste file fa una pausa ad ogni CR+LF
+sembra fatto apposta per inviare file di testo
+- send file ascii non fa pause, onora RTR
+sembra che al "rientro" sia possibile perdere qualche carattere
+ma 19200 8N2 sembra ok!!!
+- RTR sembra rispettato "subito"
+
+- commentati capson/capsoff
+- z0Rx: posticipata la RTR -> on
+macro m_rtsH/m_rtsL
+macro m_capsLedOn/m_capsLedOff
+
+con RTR: il 241 esimo byte viene perso a 19200 N81
+viene perso a 9600 N81
+non viene perso a  9600 N82
+non viene perso a 19200 N82
+
+aggiunte macro
+- m_swToRx
+- m_swToTx
+da invocare prima/dopo:
+- m_rtsL
+- m_rtsH
+al posto di ld a,14/15 ed out psg_sel
+
+minicom/ttyUSB sembrano onorare "immediatamente" RTR,
+RTR viene deasserito tra lo stop del penultimo byte che si desidera ricevere
+e minicom/ttyUSB trasmette (correttamente) ancora 1 byte.
+
+kernel/driver adottano bufferizzazione interna dei byte da trasmettere,
+minicom puo' segnalare la fine dell'invio di un file mentre MSX continua a ricevere
+(non ho "misurato" ma direi ALMENO ancora 1KByte).
+
+minicom:
+- CTRL A+Z+S -> send ascii: onora RTR, ogni carattere 0x0A viene trasmesso come 0x0D 0x0A
+ad esempio usando il file 32768.rnd:
+offset 0x530:   4a a6 49 a1 5f ab 9d fa 59 7b c3 0e 03 0a d8 81     trasmesso da minicom
+offset 0x530:   4a a6 49 a1 5f ab 9d fa 59 7b c3 0e 03 0d 0a d8     ricevuto da joyCOM
+- CTRL A+Z+Y paste file: la trasmissione fa una pausa
+sicuramente ad ogni LF/CR (riga di testo ASCII)
+mentre un file pieno di 0x00 non sembra essere trasmesso
+Avrei supposto che le 2 opzioni funzionassero al contrario...
+
+FRB.C clonato da JCTEST.C
+
+z0Tx@ uniformato timing su STOP bit
+
+jcTxBuf(), jcTxS() sembrano ok
+
+KBDSCAN.MAC estratta da BIOS ed isolata, esporta JCKBD@::, sembra ok anche con auto-repeat
+
+ipotesi:
+jcInit: aggiungere parametro kbdscanlock
+- se FALSE si assume che TX, RTS, DTR vengano imposti a 1, 1, 0 durante
+la scansione di tastiera/joystick della isr del bios.
+- se TRUE si assume che:
+    - TX, RTS, DTR sono pilotati delle routine jcXXX
+    - la scansione della tastiera (e relativo timing) e' responsabilita' dell'utente, da fare:
+        - al cambio valore di JIFFY se IFF0 = 1 (EI)
+        - leggendo vdp status se IFF0 = 0 (DI))
+    
+
+JCTEST -> JCCHAT
+JCTEST vorrebbe essere tipo TERM
+ISR_SCAN traccia modifiche per scansione kbd custom
+
+jcKSTO
+disKbdCtr   equ     dtrOrMask + 1
+disKbdRld   equ     disKbdCtr + 1
+
+first rx e' pensato per tempi lunghi, quando HL arriva a 0 e' passato 1 secondo
+si sfrutta questo "lungo" loop agganciandosi al loop interno allorche' L diventa 0
+
+next rx  e' pensato per tempi brevi (solitamente viene impostato in modo che H sia 1)
+forse e' meglio e piu' semplice spostare le attivita' ISR_SCAN dopo che HL arriva a 0 (e non quando L arriva a 0)
+
+wNext non carica IYL a 10 ma continua col valore gia' presente
+
+JCKBD disabilita ed abilita interrupts
+JCCHAT.C: flag intsOn per stato lock
+
+col modem speedcom, dopo AT (senza echo) i caratteri successivi hanno echo!
+'6' 0x36 e' diventato 0x96
+00110110     10010110
+
+'5' -> 0x9A
+0x35
+00110101     10011010
+
+ATTENZIONE   jclock oltre a disabilitare ints agisce sul psg basandosi su IX
+
+ripristinata psgStart
+aggiunta getix
+aggiunta KEYPRESS per leggere fisicamente keyboard: per NON basarsi su NEWKEY (potrebbe non essere aggiornata!?)
+sostituita prima jcLoop() con JCKBD() per ottenere subito key, sembra dover aspettare jiffy per il momento giusto
+
+z0TxNS no stop
+... non c'e' verso...
+eppure col modem brusa, dopo AT gli echi vengono acchiappati
+
+jcDSR ok!
+forse jcCD?!
+
+
+joyCOM-260107 provato copn logic analyzer
+US Robotics risponde quasi in tempo reale (rx segue tx con un delay di pochi us)
+Modem FR risponde quasi in tempo reale su 'A', con un delay maggiore su 'T';
+per i caratteri seguenti il delay aumenta e jc riesce a cattuare l'echo.
+
+
+joyCOM-260129-BU
+ripristinata intLock/intUnlock in jcLock/jcUnlock
+jctest un poco piu' snella, hexMode non funzia
+
+
+
+
+variabili kbdscan da mirror-are in jcLoop
+jcREPCNT
+jcSCNCNT
+    jcKbdLock
+        jcREPCNT = REPCNT
+        REPCNT = 0
+        jcJIFFY = JIFFY
+
+    jcLoop
+        while (jcJIFFY != JIFFY)
+        {
+            call JCKBD
+            jcJIFFY++
+        }
+
+    JCKBD
+        usa jcREPCNT per capire se e' l'int giusto per fare la scansione
+        REPCNT = 0
+
+    jcKbdUnlock
+        REPCNT = jcREPCNT
+
+
+    jcIntLock
+
+    jcIntUnLock
+
+
+from https://github.com/theNestruo/msx-msxlib/blob/master/lib/msx/symbols.asm
+	SCNCNT: equ $f3f6 ; Key scan timing
+	OLDKEY:	equ $fbda ; Previous state of the keyboard matrix (11b)
+	NEWKEY:	equ $fbe5 ; Current state of the keyboard matrix (11b)
+		; $fbda, $fbe5 ; 7 6 5 4 3 2 1 0
+		; $fbdb, $fbe6 ; ; ] [ \ = - 9 8
+		; $fbdc, $fbe7 ; B A pound / . , ` '
+		; $fbdd, $fbe8 ; J I H G F E D C
+		; $fbde, $fbe9 ; R Q P O N M L K
+		; $fbdf, $fbea ; Z Y X W V U T S
+		; $fbe0, $fbeb ; F3 F2 F1 CODE CAP GRAPH CTRL SHIFT
+		; $fbe1, $fbec ; CR SEL BS STOP TAB ESC F5 F4
+		; $fbe2, $fbed ; RIGHT DOWN UP LEFT DEL INS HOME SPACE
+		; $fbe3, $fbee ; 4 3 2 1 0 none none none
+		; $fbe4, $fbef ; . , - 9 8 7 6 5
+
+
+https://comp.sys.msx.narkive.com/5m9nQs0m/change-your-msx-keyboard-layout-keyboard-matrix
+
+m_cts in versione macro bisogna verificare come tornare il risultato in A
+
+leggere una riga senza aspettare termine del fastloop interno, lettura troppo rarefatta
+loop C kbhit da verificare, 2 tasti uguali consecutivi -> c'e' solo il primo
+
+ATTENZIONE
+- EXTERNAL
+- swtotx/rx da sistemare in jcRts e jcCts
+- z0tx non supporta flowctrl
+- jcLock valorizza PSG15.6 (JOY_SEL_MASK) senza conservare il valore originale
+  jcUnlock non lo ripristina
+
+https://www.msx.org/wiki/System_hooks
+
+https://www.msx.org/wiki/MSX-DOS_2
+https://www.msx.org/forum/msx-talk/development/msx-c-qa-official-thread?page=24
+
+C/embedded/protocols
+https://utat-ss.readthedocs.io/en/master/c-programming/binary-hex-literals.html
+
+http://www.giordanobenicchi.it/hwb/co_JoystickMsx.html
+https://www.mypccollection.altervista.org/downloads/hardware/Msx/MSX%20Joystick_port.pdf
+
+https://map.grauw.nl/resources/msxsystemvars.php
+
+
+https://www.activexperts.com/serial-port-component/at/hayes/
+https://hepd.pnpi.spb.ru/docs_html/hylafax/Modems/Hayes/hayes.html

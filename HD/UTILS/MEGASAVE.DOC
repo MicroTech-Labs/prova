@@ -1,0 +1,63 @@
+				   MEGASAVE
+				==============
+
+
+-------------------------------------------------------------------------------
+	   NOTA : LE CARATTERISTICHE COMUNI A TUTTE LE OPZIONI SONO:
+		  - USCITA IN QUALSIASI MOMENTO CON IL TASTO [ESC];
+		  - NUMERAZIONE ESADECIMALE.
+-------------------------------------------------------------------------------
+
+	[MP=Memory Pointer]
+
+TASTI CURSORE	: movimento del cursore.
+Q		: MP=MP-16.
+Z		: MP=MP+16.
+^Q		: schermata precedente ( MP=MP-(18*16) ).
+^Z		: schermata successiva ( MP=MP+(18*16) ).
+W		: MP=MP-2000h.
+X		: MP=MP+2000h.
+^W		: MP=MP-4000h.
+^X		: MP=MP+4000h.
+R		: Ram check : segnala le locazioni RAM presenti tra START e
+		    STOP; quando viene segnalata una locazione RAM, premendo
+		    SELECT se ne assegna l'indirizzo al MP.
+T		: ram Test : controlla i contenuti degli slot primari e
+		    secondari.
+M		: Memory pointer : assegna un nuovo indirizzo al MP.
+I		: Input da una porta di I/O.
+O		: Output su una porta di I/O.
+P		: Poke : inserisce un valore nella locazione di memoria puntata
+		    dal MP.
+^C		: Code type : determina il tipo di codice che puo' essere
+		    salvato su disco :
+		    DOS:solo codice;
+		    BASIC:codice preceduto da  FEh,Base address,Base address+
+			  lunghezza codice-1,Base address  in modo da poterlo
+			  caricare con il Disk Basic.
+^B		: Base address : determina l'indirizzo al quale il Disk Basic
+		    carichera' i dati salvati su disco.
+^S		: Save : salva la zona di memoria tra START e STOP.
+HOME		: permette la configurazione della memoria:
+		    SELECT:porta il MP alla prima locazione della pagina
+			   puntata dal cursore;
+		    RETURN:rigenera la schermata.
+INS		: inserimento cartridge : esegue un ciclo di attesa (da 10 a
+		    90 secondi) durante il quale vengono disabilitati gli
+		    interrupt.
+DEL		: i parametri che vengono richiesti in questa opzione sono:
+		    START,STOP,NAME,ADDRESS,VALUE,NUMBER OF BLOCKS;
+		    l'operazione eseguita e' la seguente:
+		    - pone VALUE in ADDRESS (poke ADDRESS,VALUE);
+		    - salva il blocco con il nome assegnato e l'estensione
+		      formata dalla numerazione progressiva dei blocchi;
+		    - incrementa VALUE (VALUE=VALUE+1);
+		    - ripete l'operazione per il numero di blocchi voluto.
+CTRL+SHIFT+2	: ritorno al BASIC.
+(da BASIC) : F1	: ritorna al programma (ATTENZIONE:se quando si torna al BASIC
+		    viene caricato un altro programma, e' molto probabile che
+		    MEGASAVE debba essere ricaricato, dato che risiede in
+		    memoria a partire dall'indirizzo 8100h).
+
+-------------------------------------------------------------------------------
+  memoria a partire dall'ind

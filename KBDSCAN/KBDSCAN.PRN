@@ -1,0 +1,2451 @@
+	MSX.M-80 1.00	01-Apr-85	PAGE	1
+
+
+                        ; Faking stuff for M80 and MX
+                        module	macro
+                        	endm
+                        endmodule macro
+                        	endm
+                        extrn	macro
+                        	endm
+                        ; ---
+                        
+                        ;    TITLE ( MSX ROM BASIC BIOS )
+                        ;    PAGE 36
+                                .list
+                        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                        ;                           ;
+                        ;       Port definition     ;
+                        ;                           ;
+                        ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                        ;
+                        ;       VDP address definition
+                        ;
+  0098                  VDP.DRW EQU     10011000B       ;98H    Read/write data VDP
+  0099                  VDP.CW  EQU     10011001B       ;99H    write command to VDP
+  0099                  VDP.SR  EQU     10011001B       ;99H    read status from VDP
+                        ;
+  0007                  V.COLR  EQU     7               ;In text mode, foreground and background color
+                                                        ;Otherwise background color
+                        ;
+                        ;       PSG address definition
+                        ;
+  00A0                  PSG.LW  EQU     10100000B       ;A0H    latch address for PSG
+  00A1                  PSG.DW  EQU     10100001B       ;A1H    write data to PSG
+  00A2                  PSG.DR  EQU     10100010B       ;A2H    read data from PSG
+                        ;
+  000E                  PSG.PA  EQU     14              ;Port A of PSG
+  000F                  PSG.PB  EQU     15              ;Port B of PSG
+                        
+                        ;
+                        ;       PPI address definition
+                        ;
+  00A8                  PPI.AR  EQU     10101000B       ;A8H    read from PPI Port A
+  00A9                  PPI.BR  EQU     10101001B       ;A9H    read from PPI Port B
+  00AA                  PPI.CR  EQU     10101010B       ;AAH    read from PPI Port C
+  00A8                  PPI.AW  EQU     10101000B       ;A8H    Write to PPI Port A
+  00AA                  PPI.CW  EQU     10101010B       ;AAH    write to PPI Port C
+  00AB                  PPI.CM  EQU     10101011B       ;ABH    write to PPI command register
+                        
+  0000'                 JCKBD@::
+                        ;
+                        ; Scan keyboard
+                        ;
+  0000'   AF                    XOR     A               ;Enable first key click
+  0001'   32 FBD9               LD      (CLIKFL),A
+  0004'   CD 0022'              CALL    KEYCHK          ;Detect valid key transition and check buffer
+  0007'   20 18                 JR      NZ,INTRET       ;Some characters still remain, don't repeat
+  0009'   21 F3F7               LD      HL,REPCNT
+  000C'   35                    DEC     (HL)            ;Need to enter repeat mode
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-1
+
+
+  000D'   20 12                 JR      NZ,INTRET       ;No
+  000F'   36 01                 LD      (HL),1          ;Set short time repeat
+  0011'   21 FBDA               LD      HL,OLDKEY       ;Clear OLDKEY status
+  0014'   11 FBDB               LD      DE,OLDKEY+1
+  0017'   01 000A               LD      BC,0AH
+  001A'   36 FF                 LD      (HL),0FFH
+  001C'   ED B0                 LDIR
+  001E'   CD 004A'              CALL    KEYCK4          ;Check if currently pressed key is valid
+  0021'                 INTRET:
+  0021'   C9                    RET
+                        
+  0022'                 KEYCHK:
+                        ;
+  0022'   DB AA                 IN      A,(PPI.CR)      ;Get what is currently output to Port C
+  0024'   E6 F0                 AND     0F0H            ;Leave higher 4 bits unaffected
+  0026'   4F                    LD      C,A
+  0027'   06 0B                 LD      B,0BH
+  0029'   21 FBE5               LD      HL,NEWKEY       ;Move current key status to NEWKEY
+  002C'                 KEYCK1:
+  002C'   79                    LD      A,C
+  002D'   D3 AA                 OUT     (PPI.CW),A      ;Select row
+  002F'   DB A9                 IN      A,(PPI.BR)      ;Get column information of selected raw
+  0031'   77                    LD      (HL),A          ;Move it
+  0032'   0C                    INC     C               ;Select next raw
+  0033'   23                    INC     HL
+  0034'   10 F6                 DJNZ    KEYCK1          ;Loop until all rows are sensed
+                        
+                        ;;;NOSTOP:
+                        ;
+  0036'   11 FBE5               LD      DE,NEWKEY       ;[OLDKEY] + 11
+  0039'   06 0B                 LD      B,0BH
+  003B'                 KEYCK2:
+  003B'   1B                    DEC     DE
+  003C'   2B                    DEC     HL
+  003D'   1A                    LD      A,(DE)          ;Get OLDKEY status
+  003E'   BE                    CP      (HL)            ;Compare with NEWKEY status
+  003F'   20 04                 JR      NZ,KEYCK3       ;Changed, set long repeat interval
+  0041'   10 F8                 DJNZ    KEYCK2
+  0043'   18 05                 JR      KEYCK4          ;No change
+  0045'                 KEYCK3:
+                        ;
+  0045'   3E 0D                 LD      A,0DH
+  0047'   32 F3F7               LD      (REPCNT),A
+  004A'                 KEYCK4:
+  004A'   06 0B                 LD      B,0BH           ;Set number of rows
+  004C'   21 FBDA               LD      HL,OLDKEY
+  004F'   11 FBE5               LD      DE,NEWKEY
+  0052'                 KEYCK5:
+  0052'   1A                    LD      A,(DE)          ;Get current key status
+  0053'   4F                    LD      C,A
+  0054'   AE                    XOR     (HL)            ;See if any bit changed
+  0055'   A6                    AND     (HL)            ;See if this change is negative transition
+  0056'   71                    LD      (HL),C          ;Update old status
+  0057'   C4 0066'              CALL    NZ,KEYANY       ;Active transition, go find it
+  005A'   13                    INC     DE
+  005B'   23                    INC     HL
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-2
+
+
+  005C'   10 F4                 DJNZ    KEYCK5
+  005E'                 CHKBUF:
+                        ;
+                        ; Check if buffer is empty or not
+                        ;
+  005E'   2A F3FA               LD      HL,(GETPNT)     ;Load GETPNT
+  0061'   3A F3F8               LD      A,(PUTPNT)      ;Load lower 8 bit of PUTPNT
+  0064'   95                    SUB     L               ;Check if same
+  0065'   C9                    RET
+                        
+                        ;CHSNS:
+                        ;;
+                        ;        EI                      ;Make sure interrupts are enabled
+                        ;        PUSH    HL              ; Save environments
+                        ;        PUSH    DE
+                        ;        PUSH    BC
+                        ;        CALL    CHKSCR          ;Are we in text mode?
+                        ;        JR      NC,CHSNS1       ;No, do not flip function keys
+                        ;        LD      A,(FNKSWI)      ;Get current shift status
+                        ;        LD      HL,SFTKEY       ;Get current function key display
+                        ;        XOR     (HL)            ;Are they different
+                        ;        LD      HL,CNSDFG       ;Function key displayed at all?
+                        ;        AND     (HL)
+                        ;        RRCA
+                        ;        CALL    C,DSPFNK        ;Update display
+                        ;CHSNS1:
+                        ;        CALL    CHKBUF
+                        ;        POP     BC              ;Restore environments
+                        ;        POP     DE
+                        ;        POP     HL
+                        ;        RET
+                        
+  0066'                 KEYANY:
+                        ;
+                        ; [[[ SUBROUTINE 'KEYANY' ]]]
+                        ;
+  0066'   E5                    PUSH    HL              ;Save environments
+  0067'   D5                    PUSH    DE
+  0068'   C5                    PUSH    BC
+  0069'   F5                    PUSH    AF              ;Save pressed bit
+  006A'   3E 0B                 LD      A,0BH
+  006C'   90                    SUB     B               ;Calculate base code
+  006D'   87                    ADD     A,A
+  006E'   87                    ADD     A,A
+  006F'   87                    ADD     A,A
+  0070'   4F                    LD      C,A
+  0071'   06 08                 LD      B,8             ;Set up counter for 8 bit
+  0073'   F1                    POP     AF              ;Restore pressed bit
+  0074'                 KYANY1:
+  0074'   1F                    RRA
+  0075'   C5                    PUSH    BC
+  0076'   F5                    PUSH    AF
+  0077'   DC 0117'              CALL    C,KEYCOD        ;If pressed bit, call key coder.
+  007A'   F1                    POP     AF
+  007B'   C1                    POP     BC
+  007C'   0C                    INC     C               ;Try next code
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-3
+
+
+  007D'   10 F5                 DJNZ    KYANY1          ;Loop until all bits are checked
+  007F'   C3 03D5'              JP      PBDHRT          ;Restore environments
+                        ;
+                        ; [[[ SUBROUTINE 'KEYCOD' ]]
+                        ;
+                        ; Return key-code in buffer if valid
+                        ;
+  0082'                 KYJTAB:
+  0082'   0A                    DB      10
+  0083'   0143'                 DW      KYNUM           ;0..9
+  0085'   16                    DB      22
+  0086'   017D'                 DW      KYCOD1
+  0088'   30                    DB      48
+  0089'   015A'                 DW      KYALP           ;A..Z
+  008B'   33                    DB      51
+  008C'   01D7'                 DW      KYEASY
+  008E'   34                    DB      52
+  008F'   01FD'                 DW      KYLOCK          ;Capital lock
+  0091'   35                    DB      53
+  0092'   01E6'                 DW      KYKLOK          ;Kana lock
+  0094'   3A                    DB      58
+  0095'   0197'                 DW      KYFUNC          ;Function key
+  0097'   3C                    DB      60
+  0098'   01D7'                 DW      KYEASY
+  009A'   3D                    DB      61
+  009B'   020D'                 DW      KYSTOP          ;Stop key
+  009D'   41                    DB      65
+  009E'   01D7'                 DW      KYEASY
+  00A0'   42                    DB      66
+  00A1'   01CD'                 DW      KYCLS           ;CLS/HOME key
+  00A3'   FF                    DB      255
+  00A4'   01D7'                 DW      KYEASY
+                        ;
+  00A6'                 NMSFTB:
+  00A6'   FF                    DB      255
+  00A7'   27                    DB      "'"
+  00A8'   22                    DB      34              ;Double quote
+  00A9'   23 24 25              DB      "#$%&'()"
+  00AC'   26 27 28      
+  00AF'   29            
+                        
+                        ;
+  00B0'                 ALPJMP:
+  00B0'   021C'                 DW      PUTCHR          ;CTRL+shift
+  00B2'   021C'                 DW      PUTCHR          ;CTRL
+  00B4'   016F'                 DW      KEYSFT          ;   SHIFT
+  00B6'   0171'                 DW      KEYNOM          ;
+                        ;
+  00B8'                 KYC1TB:
+  00B8'   00D9'                 DW      KY1SFC-10       ;CTRL+SHIFT
+  00BA'   00CD'                 DW      KY1CNT-10       ;CTRL
+  00BC'   00C2'                 DW      KY1SFT-10       ;   SHIFT
+  00BE'   00B6'                 DW      KY1NOM-10       ;
+  00C0'                 KY1NOM:
+  00C0'   2D 5E 5C              DB      "-^\@[;:],./"
+  00C3'   40 5B 3B      
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-4
+
+
+  00C6'   3A 5D 2C      
+  00C9'   2E 2F         
+                        
+                        
+  00CB'   FF                    DB      255
+  00CC'                 KY1SFT:
+  00CC'   3D 7E 60              DB      "=~`{+*}"
+  00CF'   7B 2B 2A      
+  00D2'   7D            
+                        
+  00D3'   3C                    DB      00111100B       ;Less than sign
+  00D4'   3E                    DB      00111110B       ;Greater than sign
+  00D5'   3F 5F                 DB      "?_"
+  00D7'                 KY1CNT:
+  00D7'   2D                    DB      "-"
+  00D8'   1E                    DB      "^"-"@"
+  00D9'   1C                    DB      "\"-"@"
+  00DA'   00                    DB      "@"-"@"
+  00DB'   1B                    DB      "["-"@"
+  00DC'   3B 3A                 DB      ";:"
+  00DE'   1D                    DB      "]"-"@"
+  00DF'   2C 2E 2F              DB      ",./"
+  00E2'   FF                    DB      255
+  00E3'                 KY1SFC:
+  00E3'   3D                    DB      "="
+  00E4'   1E                    DB      "^"-"@"
+  00E5'   1C                    DB      "\"-"@"
+  00E6'   00                    DB      "@"-"@"
+  00E7'   1B                    DB      "["-"@"
+  00E8'   2B 2A                 DB      "+*"
+  00EA'   1D                    DB      "]"-"@"
+  00EB'   3C                    DB      00111100B       ;Less than sign
+  00EC'   3E                    DB      00111110B       ;Greater than sign
+  00ED'   3F                    DB      "?"
+  00EE'   1F                    DB      "_"-"@"
+                        ;
+  00EF'                 EASYTB:
+  00EF'   00                    DB      0               ;Shift      (48)
+  00F0'   00                    DB      0               ;Control    (49)
+  00F1'   00                    DB      0               ;Graph      (50)
+  00F2'   00                    DB      0               ;Cap lock   (51)
+  00F3'   00                    DB      0               ;Kana lock  (52)
+  00F4'   00                    DB      0               ;F1         (53)
+  00F5'   00                    DB      0               ;F2         (54)
+  00F6'   00                    DB      0               ;F3         (55)
+  00F7'   00                    DB      0               ;F4         (56)
+  00F8'   00                    DB      0               ;F5         (57)
+  00F9'   1B                    DB      27              ;Escape     (58)
+  00FA'   09                    DB      9               ;Tab        (59)
+  00FB'   00                    DB      0               ;Stop       (60)
+  00FC'   08                    DB      8               ;Back space (61)
+  00FD'   18                    DB      "X"-"@"         ;Select     (62)
+  00FE'   0D                    DB      13              ;Enter      (63)
+  00FF'   20                    DB      32              ;Space      (64)
+  0100'   0C                    DB      12              ;Clear      (65)
+  0101'   12                    DB      "R"-"@"         ;Insert     (66)
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-5
+
+
+  0102'   7F                    DB      127             ;Rubout     (67)
+  0103'   1D                    DB      29              ;Left       (68)
+  0104'   1E                    DB      30              ;Up         (69)
+  0105'   1F                    DB      31              ;Down       (70)
+  0106'   1C                    DB      28              ;Right      (71)
+                        ;
+                        ;   For additional key matrix
+                        ;
+  0107'   01                    DB      "A"-"@"         ;           (72)
+  0108'   04                    DB      "D"-"@"         ;           (73)
+  0109'   0F                    DB      "O"-"@"         ;           (74)
+  010A'   10                    DB      "P"-"@"         ;           (75)
+  010B'   11                    DB      "Q"-"@"         ;           (76)
+  010C'   12                    DB      "R"-"@"         ;           (77)
+  010D'   13                    DB      "S"-"@"         ;           (78)
+  010E'   14                    DB      "T"-"@"         ;           (79)
+  010F'   00                    DB      0               ;           (80)
+  0110'   00                    DB      0               ;           (81)
+  0111'   00                    DB      0               ;           (82)
+  0112'   00                    DB      0               ;           (83)
+  0113'   00                    DB      0               ;           (84)
+  0114'   00                    DB      0               ;           (85)
+  0115'   00                    DB      0               ;           (86)
+  0116'   00                    DB      0               ;           (87)
+                        
+                        ;
+  0117'                 KEYCOD:
+                        ;
+                        ; [[[ SUBROUTINE 'KEYCOD' ]]]
+                        ;
+                        ; Return key-code in buffer if valid
+                        ;
+  0117'   79                    LD      A,C             ;Get raw code
+  0118'   FE FF                 CP      0FFH            ;Just for fail safe
+  011A'   C8                    RET     Z
+  011B'   21 0082'              LD      HL,KYJTAB
+  011E'   CD FDCC               CALL    H.KEYC
+  0121'   FE 30                 CP      48              ;Possibly a KANA or graphic character
+  0123'   30 13                 JR      NC,KYCLAS       ;No
+  0125'   3A FBEB               LD      A,(SFTKEY)      ;Get shift key status
+  0128'   0F                    RRCA                    ;Control pressed?
+  0129'   0F                    RRCA
+  012A'   30 0B                 JR      NC,KYCLA0       ;Yes, this supersedes everything
+  012C'   0F                    RRCA                    ;How about graphic shift
+  012D'   D2 0344'              JP      NC,KYGRAP       ;Yes, this has the 2nd priority
+  0130'   3A FCAC               LD      A,(KANAST)      ;KANA lock active
+  0133'   A7                    AND     A
+  0134'   C2 024A'              JP      NZ,KYKANA       ;Yes
+  0137'                 KYCLA0:
+  0137'   79                    LD      A,C
+  0138'                 KYCLAS:
+  0138'   BE                    CP      (HL)            ;Compare range
+  0139'   23                    INC     HL
+  013A'   5E                    LD      E,(HL)          ;Get jump address in [DE]
+  013B'   23                    INC     HL
+  013C'   56                    LD      D,(HL)
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-6
+
+
+  013D'   23                    INC     HL
+  013E'   D5                    PUSH    DE              ;Assume matched
+  013F'   D8                    RET     C               ;Good assumption
+  0140'   D1                    POP     DE              ;Discard stack
+  0141'   18 F5                 JR      KYCLAS          ;Check next possibility
+  0143'                 KYNUM:
+                        ;
+  0143'   C6 30                 ADD     A,'0'           ;Assume no shift
+  0145'   47                    LD      B,A             ;Save code
+  0146'   3A FBEB               LD      A,(SFTKEY)      ;Check shift status
+  0149'   0F                    RRCA
+  014A'   78                    LD      A,B             ;Restore code
+  014B'   38 0A                 JR      C,JPUTCH        ;Good assumption
+  014D'   06 00                 LD      B,0
+  014F'   21 00A6'              LD      HL,NMSFTB
+  0152'   09                    ADD     HL,BC           ;This must not be 'DADF'
+  0153'   7E                    LD      A,(HL)          ;Get code for shift-number
+  0154'   FE FF                 CP      0FFH            ;Shift '0'?
+  0156'   C8                    RET     Z               ;Yes, ignore this
+  0157'                 JPUTCH:
+  0157'   C3 021C'              JP      PUTCHR          ;Put this in buffer
+  015A'                 KYALP:
+                        ;
+  015A'   3A FBEB               LD      A,(SFTKEY)
+  015D'   E6 03                 AND     3
+  015F'   87                    ADD     A,A
+  0160'   5F                    LD      E,A
+  0161'   16 00                 LD      D,0
+  0163'   21 00B0'              LD      HL,ALPJMP
+  0166'   19                    ADD     HL,DE
+  0167'   7E                    LD      A,(HL)          ;Get jump address
+  0168'   23                    INC     HL
+  0169'   66                    LD      H,(HL)
+  016A'   6F                    LD      L,A
+  016B'   79                    LD      A,C             ;Get code
+  016C'   D6 15                 SUB     15H             ;Make it a control character (1 - 26)
+  016E'   E9                    JP      (HL)
+  016F'                 KEYSFT:
+                        ;
+  016F'   C6 20                 ADD     A,' '
+  0171'                 KEYNOM:
+  0171'   47                    LD      B,A             ;Save code
+  0172'   3A FCAB               LD      A,(CAPST)
+  0175'   2F                    CPL
+  0176'   E6 20                 AND     00100000B       ;Bit 5 is on if CAP lock not active
+  0178'   A8                    XOR     B
+  0179'   C6 40                 ADD     A,01000000B
+  017B'   18 DA                 JR      JPUTCH
+  017D'                 KYCOD1:
+                        ;
+  017D'   21 00B8'              LD      HL,KYC1TB
+  0180'   3A FBEB               LD      A,(SFTKEY)
+  0183'   E6 03                 AND     3               ;Extract shift and control status
+  0185'   87                    ADD     A,A
+  0186'   5F                    LD      E,A
+  0187'   16 00                 LD      D,0
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-7
+
+
+  0189'   19                    ADD     HL,DE
+  018A'   7E                    LD      A,(HL)
+  018B'   23                    INC     HL
+  018C'   66                    LD      H,(HL)
+  018D'   6F                    LD      L,A
+  018E'   59                    LD      E,C
+  018F'   19                    ADD     HL,DE
+  0190'   7E                    LD      A,(HL)
+  0191'   FE FF                 CP      0FFH            ;Should generate some code?
+  0193'   C2 021C'              JP      NZ,PUTCHR       ;Yes
+  0196'   C9                    RET                     ;No code should be generated
+  0197'                 KYFUNC:
+                        ;
+                        ; Function keys
+                        ;
+  0197'   3A FBEB               LD      A,(SFTKEY)      ;Is shift pressed?
+  019A'   0F                    RRCA
+  019B'   38 04                 JR      C,KYFNC1        ;No
+  019D'   79                    LD      A,C
+  019E'   C6 05                 ADD     A,5
+  01A0'   4F                    LD      C,A
+  01A1'                 KYFNC1:
+  01A1'   59                    LD      E,C             ;[DE] is (56..65)
+  01A2'   16 00                 LD      D,0
+  01A4'   21 FB99               LD      HL,FNKFLG-53    ;Check if this function key is an event device
+  01A7'   19                    ADD     HL,DE
+  01A8'   7E                    LD      A,(HL)
+  01A9'   A7                    AND     A
+  01AA'   20 13                 JR      NZ,FNKINT       ;Request trap if not in direct mode
+  01AC'                 KYFNC2:
+  01AC'   EB                    EX      DE,HL
+  01AD'   29                    ADD HL,HL
+  01AE'   29                    ADD HL,HL
+  01AF'   29                    ADD HL,HL
+  01B0'   29                    ADD     HL,HL
+  01B1'   11 F52F               LD      DE,FNKSTR-53*16
+  01B4'   19                    ADD     HL,DE           ;Get function key string address
+  01B5'   EB                    EX      DE,HL           ;Move address to DE
+  01B6'                 KYFNC3:
+  01B6'   1A                    LD      A,(DE)          ;Get from function key string
+  01B7'   A7                    AND     A               ;End of string
+  01B8'   C8                    RET     Z               ;Yes
+  01B9'   CD 021C'              CALL    PUTCHR          ;Put this character in buffer
+  01BC'   13                    INC     DE              ;Check next character
+  01BD'   18 F7                 JR      KYFNC3
+  01BF'                 FNKINT:
+                        ;
+  01BF'   2A F41C               LD      HL,(CURLIN)     ;Are we in direct mode (CURLIN=65535)
+  01C2'   23                    INC     HL
+  01C3'   7C                    LD      A,H
+  01C4'   B5                    OR      L
+  01C5'   28 E5                 JR      Z,KYFNC2        ;Yes, treat as normal function key
+  01C7'   21 FBAD               LD      HL,TRPTBL-53*3
+  01CA'   19                    ADD     HL,DE
+  01CB'   19                    ADD     HL,DE
+  01CC'   19                    ADD     HL,DE
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-8
+
+
+                        
+                        
+                        
+  01CD'                 KYCLS:
+  01CD'   3A FBEB               LD      A,(SFTKEY)      ;Set carry if shift not pressed
+  01D0'   0F                    RRCA
+  01D1'   3E 0C                 LD      A,0CH           ;Load code for CLS
+  01D3'   DE 00                 SBC     A,0             ;Change to HOME if shift not pressed
+  01D5'   18 45                 JR      PUTCHR
+  01D7'                 KYEASY:
+                        ;
+                        ; Easily converted keys
+                        ;
+  01D7'   CD FDD1               CALL    H.KYEA          ;For CCP (Cut, copy, paste) editor rom
+  01DA'   5F                    LD      E,A             ;These character are simply taken from table
+  01DB'   16 00                 LD      D,0
+  01DD'   21 00BF'              LD      HL,EASYTB-48
+  01E0'   19                    ADD     HL,DE
+  01E1'   7E                    LD      A,(HL)
+  01E2'   A7                    AND     A               ;Should this key generate some code
+  01E3'   C8                    RET     Z               ;No
+  01E4'   18 36                 JR      PUTCHR          ;Yes
+  01E6'                 KYKLOK:
+                        ;
+                        ; Kana lock key
+                        ;
+  01E6'   21 FCAC               LD      HL,KANAST
+  01E9'   7E                    LD      A,(HL)
+  01EA'   2F                    CPL
+  01EB'   77                    LD      (HL),A
+  01EC'   3E 0F                 LD      A,0FH
+  01EE'   D3 A0                 OUT     (PSG.LW),A
+  01F0'   DB A2                 IN      A,(PSG.DR)
+  01F2'   E6 7F                 AND     7FH
+  01F4'   47                    LD      B,A
+  01F5'   7E                    LD      A,(HL)
+  01F6'   2F                    CPL
+  01F7'   E6 80                 AND     80H
+  01F9'   B0                    OR      B
+  01FA'   D3 A1                 OUT     (PSG.DW),A
+  01FC'                 NOKEY:
+  01FC'   C9                    RET
+  01FD'                 KYLOCK:
+                        ;
+                        ; Capital lock key
+                        ;
+  01FD'   21 FCAB               LD      HL,CAPST
+  0200'   7E                    LD      A,(HL)          ;Toggle capital status
+  0201'   2F                    CPL
+  0202'   77                    LD      (HL),A          ;Update capital status
+  0203'   2F                    CPL
+  0204'                 CHGCAP:
+  0204'   A7                    AND     A
+  0205'   3E 0C                 LD      A,0CH           ;Assume 'turn off'
+  0207'   28 01                 JR      Z,CGCAP1        ;Good assumption
+  0209'   3C                    INC     A               ;Change to 'turn on'
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-9
+
+
+  020A'                 CGCAP1:
+  020A'   D3 AB                 OUT     (PPI.CM),A
+  020C'   C9                    RET
+  020D'                 KYSTOP:
+                        ;
+                        ; STOP key
+                        ;
+  020D'   3A FBEB               LD      A,(SFTKEY)
+  0210'   0F                    RRCA                    ;Move CTRL status to carry
+  0211'   0F                    RRCA
+  0212'   3E 03                 LD      A,3             ;Assume CTRL pressed also
+  0214'   30 01                 JR      NC,KYSTP1       ;Good assumption
+  0216'   3C                    INC     A               ;CTRL not pressed, just treat as pause
+  0217'                 KYSTP1:
+  0217'   32 FC9B               LD      (INTFLG),A
+  021A'   38 0F                 JR      C,GENCLK        ;Only generate click if pause
+  021C'                 PUTCHR:
+                        ;
+                        ; Put one character in key buffer.
+                        ;
+  021C'   2A F3F8               LD      HL,(PUTPNT)     ;Load PUTPNT in [HL]
+  021F'   77                    LD      (HL),A          ;Save the character to buffer
+  0220'   CD 0389'              CALL    UPDATE          ;Increment PUTPNT
+  0223'   3A F3FA               LD      A,(GETPNT)      ;Load lower 8bit of GETPNT
+  0226'   BD                    CP      L               ;Compare it with new PUTPNT
+  0227'   C8                    RET     Z               ;If same skip next step
+  0228'   22 F3F8               LD      (PUTPNT),HL     ;Save HL in PUTPNT
+  022B'                 GENCLK:
+  022B'   3A F3DB               LD      A,(CLIKSW)      ;Key click enabled?
+  022E'   A7                    AND     A
+  022F'   C8                    RET     Z               ;No
+  0230'   3A FBD9               LD      A,(CLIKFL)      ;Already generated?
+  0233'   A7                    AND     A
+  0234'   C0                    RET     NZ              ;Yes, don't click any more
+  0235'   3E 0F                 LD      A,0FH
+  0237'   32 FBD9               LD      (CLIKFL),A      ;Set flag to disable more clicks
+  023A'   D3 AB                 OUT     (PPI.CM),A
+  023C'   3E 0A                 LD      A,0AH
+  023E'                 CLICKW:
+  023E'   3D                    DEC     A
+  023F'   20 FD                 JR      NZ,CLICKW
+  0241'                 CHGSND:
+  0241'   A7                    AND     A
+  0242'   3E 0E                 LD      A,0EH           ;Assume 'turn off'
+  0244'   28 01                 JR      Z,CGSND1        ;Good assumption
+  0246'   3C                    INC     A               ;Change to 'turn on'
+  0247'                 CGSND1:
+  0247'   D3 AB                 OUT     (PPI.CM),A
+  0249'   C9                    RET
+  024A'                 KYKANA:
+                        ;
+                        ; KANA key pressed while KANA lock is active
+                        ;
+  024A'   3A FCAD               LD      A,(KANAMD)      ;JIS or AIUEO?
+  024D'   A7                    AND     A               ;Affect Z flag
+  024E'   3A FBEB               LD      A,(SFTKEY)      ;Check shift key
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-10
+
+
+  0251'   0F                    RRCA                    ;Affect Carry flag
+  0252'   28 0A                 JR      Z,KAIUEO        ;AIUEO order
+  0254'   21 02E4'              LD      HL,KANJNO
+  0257'   38 0D                 JR      C,KYKAN1
+  0259'   21 0314'              LD      HL,KANJSF
+  025C'   18 08                 JR      KYKAN1
+  025E'                 KAIUEO:
+                        ;
+  025E'   21 0284'              LD      HL,KANANO       ;Assume shift not pressed
+  0261'   38 03                 JR      C,KYKAN1        ;Good assumption
+  0263'   21 02B4'              LD      HL,KANASF
+  0266'                 KYKAN1:
+  0266'   06 00                 LD      B,0
+  0268'   09                    ADD     HL,BC
+  0269'   01 021C'              LD      BC,PUTCHR       ;Push jump address
+  026C'   C5                    PUSH    BC
+  026D'   3A FCAB               LD      A,(CAPST)       ;Capital lock (katakana) active?
+  0270'   A7                    AND     A
+  0271'   7E                    LD      A,(HL)
+  0272'   C0                    RET     NZ              ;active
+  0273'   FE A6                 CP      165+1           ;Special characters?
+  0275'   D8                    RET     C               ;Yes, no conversion necessary
+  0276'   FE B0                 CP      0B0H
+  0278'   C8                    RET     Z
+  0279'   FE DE                 CP      0DEH
+  027B'   D0                    RET     NC
+  027C'   D6 20                 SUB     ' '             ;Assume first half
+  027E'   FE A0                 CP      191-32+1        ;Really first half
+  0280'   D8                    RET     C               ;Good assumption
+  0281'   C6 40                 ADD     A,32+32         ;Compensate
+  0283'   C9                    RET
+  0284'                 KANANO:
+                        ;   Kana table (AIUEO order, un-shifted
+                        ;
+  0284'   C9 B1 B2              DB      0C9H,0B1H,0B2H,0B3H,0B4H,0B5H,005H
+  0287'   B3 B4 B5      
+  028A'   05            
+                        
+  028B'   C6 C7 C8              DB      0C6H,0C7H,0C8H,0D7H,0D8H,0D9H,0DAH
+  028E'   D7 D8 D9      
+  0291'   DA            
+                        
+  0292'   DB D3 DE              DB      0DBH,0D3H,0DEH,0DFH,0D6H,0DCH,0A6H
+  0295'   DF D6 DC      
+  0298'   A6            
+                        
+  0299'   DD BB C4              DB      0DDH,0BBH,0C4H,0C2H,0BDH,0B8H,0BEH
+  029C'   C2 BD B8      
+  029F'   BE            
+                        
+  02A0'   BF CF CC              DB      0BFH,0CFH,0CCH,0D0H,0D1H,0D2H,0D5H
+  02A3'   D0 D1 D2      
+  02A6'   D5            
+                        
+  02A7'   D4 CD CE              DB      0D4H,0CDH,0CEH,0B6H,0B9H,0BCH,0BAH
+  02AA'   B6 B9 BC      
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-11
+
+
+  02AD'   BA            
+                        
+  02AE'   CB C3 B7              DB      0CBH,0C3H,0B7H,0C1H,0CAH,0C0H
+  02B1'   C1 CA C0      
+                        
+  02B4'                 KANASF:
+                        ;   Shifted
+                        ;
+  02B4'   C9 A7 A8              DB      0C9H,0A7H,0A8H,0A9H,0AAH,0ABH,005H
+  02B7'   A9 AA AB      
+  02BA'   05            
+                        
+  02BB'   C6 C7 C8              DB      0C6H,0C7H,0C8H,0D7H,0D8H,0D9H,0DAH
+  02BE'   D7 D8 D9      
+  02C1'   DA            
+                        
+  02C2'   A2 D3 B0              DB      0A2H,0D3H,0B0H,0A3H,0AEH,0A4H,0A1H
+  02C5'   A3 AE A4      
+  02C8'   A1            
+                        
+  02C9'   A5 BB C4              DB      0A5H,0BBH,0C4H,0AFH,0BDH,0B8H,0BEH
+  02CC'   AF BD B8      
+  02CF'   BE            
+                        
+  02D0'   BF CF CC              DB      0BFH,0CFH,0CCH,0D0H,0D1H,0D2H,0ADH
+  02D3'   D0 D1 D2      
+  02D6'   AD            
+                        
+  02D7'   AC CD CE              DB      0ACH,0CDH,0CEH,0B6H,0B9H,0BCH,0BAH
+  02DA'   B6 B9 BC      
+  02DD'   BA            
+                        
+  02DE'   CB C3 B7              DB      0CBH,0C3H,0B7H,0C1H,0CAH,0C0H
+  02E1'   C1 CA C0      
+                        
+  02E4'                 KANJNO:
+                        ;   Kana table JIS order, un-shifted
+                        ;
+  02E4'   DC C7 CC              DB      0DCH,0C7H,0CCH,0B1H,0B3H,0B4H,0B5H
+  02E7'   B1 B3 B4      
+  02EA'   B5            
+                        
+  02EB'   D4 D5 D6              DB      0D4H,0D5H,0D6H,0CEH,0CDH,0B0H,0DEH
+  02EE'   CE CD B0      
+  02F1'   DE            
+                        
+  02F2'   DF DA B9              DB      0DFH,0DAH,0B9H,0D1H,0C8H,0D9H,0D2H
+  02F5'   D1 C8 D9      
+  02F8'   D2            
+                        
+  02F9'   DB C1 BA              DB      0DBH,0C1H,0BAH,0BFH,0BCH,0B2H,0CAH
+  02FC'   BF BC B2      
+  02FF'   CA            
+                        
+  0300'   B7 B8 C6              DB      0B7H,0B8H,0C6H,0CFH,0C9H,0D8H,0D3H
+  0303'   CF C9 D8      
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-12
+
+
+  0306'   D3            
+                        
+  0307'   D0 D7 BE              DB      0D0H,0D7H,0BEH,0C0H,0BDH,0C4H,0B6H
+  030A'   C0 BD C4      
+  030D'   B6            
+                        
+  030E'   C5 CB C3              DB      0C5H,0CBH,0C3H,0BBH,0DDH,0C2H
+  0311'   BB DD C2      
+                        
+  0314'                 KANJSF:
+                        ;   Shifted
+                        ;
+  0314'   A6 C7 CC              DB      0A6H,0C7H,0CCH,0A7H,0A9H,0AAH,0ABH
+  0317'   A7 A9 AA      
+  031A'   AB            
+                        
+  031B'   AC AD AE              DB      0ACH,0ADH,0AEH,0CEH,0CDH,0B0H,0DEH
+  031E'   CE CD B0      
+  0321'   DE            
+                        
+  0322'   A2 DA B9              DB      0A2H,0DAH,0B9H,0A3H,0A4H,0A1H,0A5H
+  0325'   A3 A4 A1      
+  0328'   A5            
+                        
+  0329'   DB C1 BA              DB      0DBH,0C1H,0BAH,0BFH,0BCH,0A8H,0CAH
+  032C'   BF BC A8      
+  032F'   CA            
+                        
+  0330'   B7 B8 C6              DB      0B7H,0B8H,0C6H,0CFH,0C9H,0D8H,0D3H
+  0333'   CF C9 D8      
+  0336'   D3            
+                        
+  0337'   D0 D7 BE              DB      0D0H,0D7H,0BEH,0C0H,0BDH,0C4H,0B6H
+  033A'   C0 BD C4      
+  033D'   B6            
+                        
+  033E'   C5 CB C3              DB      0C5H,0CBH,0C3H,0BBH,0DDH,0AFH
+  0341'   BB DD AF      
+                        
+                        
+                        ;
+  0344'                 KYGRAP:
+                        ;
+                        ; Graphic characters
+                        ;
+  0344'   06 00                 LD      B,0
+  0346'   21 0359'              LD      HL,GRPTAB
+  0349'   09                    ADD     HL,BC
+  034A'   7E                    LD      A,(HL)          ;Get from graphic key table
+  034B'   A7                    AND     A               ;Should generate some code
+  034C'   C8                    RET     Z               ;No
+  034D'   FE 80                 CP      80H             ;1 byte code?
+  034F'   F5                    PUSH    AF
+  0350'   3E 01                 LD      A,1             ;Assume not
+  0352'   DC 021C'              CALL    C,PUTCHR        ;Was 2 byte code, put header byte
+  0355'   F1                    POP     AF
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-13
+
+
+  0356'   C3 021C'              JP      PUTCHR
+                        ;
+  0359'                 GRPTAB:
+  0359'   4F 47 41              DB      4FH,47H,41H,42H,43H,44H,45H
+  035C'   42 43 44      
+  035F'   45            
+                        
+  0360'   46 4D 4E              DB      46H,4DH,4EH,57H,00H,49H,00H
+  0363'   57 00 49      
+  0366'   00            
+                        
+  0367'   84 82 81              DB      84H,82H,81H,85H,5FH,5DH,80H
+  036A'   85 5F 5D      
+  036D'   80            
+                        
+  036E'   83 00 5B              DB      83H,00H,5BH,5AH,54H,58H,55H
+  0371'   5A 54 58      
+  0374'   55            
+                        
+  0375'   53 4A 56              DB      53H,4AH,56H,00H,00H,5EH,4BH
+  0378'   00 00 5E      
+  037B'   4B            
+                        
+  037C'   00 00 50              DB      00H,00H,50H,00H,52H,4CH,59H
+  037F'   00 52 4C      
+  0382'   59            
+                        
+  0383'   00 51 00              DB      00H,51H,00H,5CH,48H,00H
+  0386'   5C 48 00      
+                        
+                        ;
+  0389'                 UPDATE:
+                        ;
+                        ; Update pointer
+                        ;
+  0389'   23                    INC     HL
+  038A'   7D                    LD      A,L
+  038B'   FE 18                 CP      18H             ;Check buffer boundary
+  038D'   C0                    RET     NZ
+  038E'   21 FBF0               LD      HL,KEYBUF
+  0391'   C9                    RET
+                        
+                        ;CHGET:
+                        ;;
+                        ;; Get one character from keyboard
+                        ;;
+                        ;        PUSH    HL
+                        ;        PUSH    DE
+                        ;        PUSH    BC
+                        ;        CALL    H.CHGE
+                        ;        CALL    CHSNS           ;Character already there?
+                        ;        JR      NZ,CHGET2       ;Yes, do not touch cursor
+                        ;        CALL    CKDPC0          ;Display cursor if disabled
+                        ;CHGET1:
+                        ;        CALL    CHSNS           ;Any character in buffer?
+                        ;        JR      Z,CHGET1        ;No, wait
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-14
+
+
+                        ;        CALL    CKERC0          ;Erase cursor if disabled
+                        ;CHGET2:
+                        ;        LD      HL,INTFLG
+                        ;        LD      A,(HL)
+                        ;        CP      4               ;Code for pause?
+                        ;        JR      NZ,CHGET3       ;No
+                        ;        LD      (HL),0          ;Clear this
+                        ;CHGET3:
+                        ;        LD      HL,(GETPNT)
+                        ;        LD      C,(HL)          ;Save pressed key
+                        ;        CALL    UPDATE          ;Update [GETPNT]
+                        ;        LD      (GETPNT),HL     ;Set new [GETPNT]
+                        ;        LD      A,C             ;Pass result to Acc
+                        ;        JP      PBDHRT
+                        
+                        ;CKCNTC:
+                        ;;
+                        ;; Check ctl-C
+                        ;;
+                        ;        PUSH    HL
+                        ;        LD      HL,0            ;To disable CONTinuing
+                        ;        CALL    ISCNTC
+                        ;        POP     HL
+                        ;        RET
+                        ;
+  0392'                 GTROW8:
+                        ;
+                        ; Get keyboard's 8th row, bit assignments are as follows.
+                        ;
+                        ; RDULxxxS
+                        ; ||||   |
+                        ; ||||   +- space
+                        ; |||+----- left
+                        ; ||+------ up
+                        ; |+------- down
+                        ; +-------- right
+                        ;
+  0392'   F3                    DI
+  0393'   DB AA                 IN      A,(PPI.CR)
+  0395'   E6 F0                 AND     0F0H
+  0397'   C6 08                 ADD     A,8
+  0399'   D3 AA                 OUT     (PPI.CW),A
+  039B'   DB A9                 IN      A,(PPI.BR)
+  039D'   FB                    EI
+  039E'   C9                    RET
+                        ;
+  039F'                 STKTBL:
+  039F'   00                    DB      0               ;RLBF
+  03A0'   05                    DB      5               ;RLB
+  03A1'   01                    DB      1               ;RL F
+  03A2'   00                    DB      0               ;RL
+  03A3'   03                    DB      3               ;R BF
+  03A4'   04                    DB      4               ;R B
+  03A5'   02                    DB      2               ;R F
+  03A6'   03                    DB      3               ;R
+  03A7'   07                    DB      7               ; LBF
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-15
+
+
+  03A8'   06                    DB      6               ; LB
+  03A9'   08                    DB      8               ; L F
+  03AA'   07                    DB      7               ; L
+  03AB'   00                    DB      0               ; BF
+  03AC'   05                    DB      5               ; B
+  03AD'   01                    DB      1               ;  F
+  03AE'   00                    DB      0               ;
+                        ;
+  03AF'                 KSTKTB:
+  03AF'   00                    DB      0               ;RBFL,
+  03B0'   03                    DB      3               ;RBF
+  03B1'   05                    DB      5               ;RB L
+  03B2'   04                    DB      4               ;RB
+  03B3'   01                    DB      1               ;R FL
+  03B4'   02                    DB      2               ;R F
+  03B5'   00                    DB      0               ;R L
+  03B6'   03                    DB      3               ;R
+  03B7'   07                    DB      7               ;  BFL
+  03B8'   00                    DB      0               ; BF
+  03B9'   06                    DB      6               ; B L
+  03BA'   05                    DB      5               ; B
+  03BB'   08                    DB      8               ; FL
+  03BC'   01                    DB      1               ; F
+  03BD'   07                    DB      7               ;  L
+  03BE'   00                    DB      0               ;
+                        ;
+                        ;
+  03BF'                 RDVDP:
+                        ;
+  03BF'   DB 99                 IN      A,(VDP.SR)
+  03C1'   C9                    RET
+  03C2'                 RSLREG:
+                        ;
+  03C2'   DB A8                 IN      A,(PPI.AR)
+  03C4'   C9                    RET
+  03C5'                 WSLREG:
+                        ;
+  03C5'   D3 A8                 OUT     (PPI.AW),A
+  03C7'   C9                    RET
+  03C8'                 SNSMAT:
+                        ;
+  03C8'   4F                    LD      C,A
+  03C9'   F3                    DI
+  03CA'   DB AA                 IN      A,(PPI.CR)      ;Get what is currently output to Port C
+  03CC'   E6 F0                 AND     0F0H            ;Leave higher 4 bits unaffected
+  03CE'   81                    ADD     A,C
+  03CF'   D3 AA                 OUT     (PPI.CW),A      ;Select row
+  03D1'   DB A9                 IN      A,(PPI.BR)      ;Get column information of selected row
+  03D3'   FB                    EI
+  03D4'   C9                    RET
+                        
+                        ;;;;;;;;;;;;;;;;;;
+  03D5'                 PBDHRT:
+  03D5'   C1                    POP     BC
+  03D6'   D1                    POP     DE
+  03D7'   E1                    POP     HL
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-16
+
+
+  03D8'   C9                    RET
+                        
+                            ;SUBTTL -MSXCHR- MSX character set
+                        
+  03D9'                 CGTABL:
+  03D9'   00 00 00              DB 00H,00H,00H,00H,00H,00H,00H
+  03DC'   00 00 00      
+  03DF'   00            
+                        
+  03E0'   00 7E 42              DB 00H,7EH,42H,7EH,42H,7EH,42H
+  03E3'   7E 42 7E      
+  03E6'   42            
+                        
+  03E7'   82 00 10              DB 82H,00H,10H,92H,54H,10H,28H
+  03EA'   92 54 10      
+  03ED'   28            
+                        
+  03EE'   44 82 00              DB 44H,82H,00H,12H,14H,0F8H,14H
+  03F1'   12 14 F8      
+  03F4'   14            
+                        
+  03F5'   34 52 92              DB 34H,52H,92H,00H,10H,10H,0FEH
+  03F8'   00 10 10      
+  03FB'   FE            
+                        
+  03FC'   10 38 54              DB 10H,38H,54H,92H,00H,10H,28H
+  03FF'   92 00 10      
+  0402'   28            
+                        
+  0403'   7C 92 38              DB 7CH,92H,38H,54H,0FEH,00H,10H
+  0406'   54 FE 00      
+  0409'   10            
+                        
+  040A'   10 10 7C              DB 10H,10H,7CH,10H,10H,0FEH,00H
+  040D'   10 10 FE      
+  0410'   00            
+                        
+  0411'   7E 42 42              DB 7EH,42H,42H,7EH,42H,42H,7EH
+  0414'   7E 42 42      
+  0417'   7E            
+                        
+  0418'   00 40 7E              DB 00H,40H,7EH,48H,3CH,28H,7EH
+  041B'   48 3C 28      
+  041E'   7E            
+                        
+  041F'   08 00 FE              DB 08H,00H,0FEH,92H,92H,0FEH,82H
+  0422'   92 92 FE      
+  0425'   82            
+                        
+  0426'   82 86 00              DB 82H,86H,00H,04H,0EEH,0A4H,0EFH
+  0429'   04 EE A4      
+  042C'   EF            
+                        
+  042D'   A2 EA 06              DB 0A2H,0EAH,06H,00H,28H,44H,82H
+  0430'   00 28 44      
+  0433'   82            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-17
+
+
+                        
+  0434'   3C 14 24              DB 3CH,14H,24H,4CH,00H,28H,0C8H
+  0437'   4C 00 28      
+  043A'   C8            
+                        
+  043B'   5C EA 6C              DB 5CH,0EAH,6CH,0C8H,50H,00H,7CH
+  043E'   C8 50 00      
+  0441'   7C            
+                        
+  0442'   20 7C 44              DB 20H,7CH,44H,7CH,44H,7CH,00H
+  0445'   7C 44 7C      
+  0448'   00            
+                        
+  0449'   0C 70 10              DB 0CH,70H,10H,0FEH,10H,10H,10H
+  044C'   FE 10 10      
+  044F'   10            
+                        
+  0450'   00 7E 10              DB 00H,7EH,10H,1EH,12H,22H,44H
+  0453'   1E 12 22      
+  0456'   44            
+                        
+  0457'   08 00 00              DB 08H,00H,00H,7CH,28H,28H,28H
+  045A'   7C 28 28      
+  045D'   28            
+                        
+  045E'   4E 00 00              DB 4EH,00H,00H,10H,10H,10H,0FFH
+  0461'   10 10 10      
+  0464'   FF            
+                        
+  0465'   00 00 00              DB 00H,00H,00H,00H,00H,00H,00H
+  0468'   00 00 00      
+  046B'   00            
+                        
+  046C'   FF 10 10              DB 0FFH,10H,10H,10H,10H,10H,10H
+  046F'   10 10 10      
+  0472'   10            
+                        
+  0473'   10 F0 10              DB 10H,0F0H,10H,10H,10H,10H,10H
+  0476'   10 10 10      
+  0479'   10            
+                        
+  047A'   10 10 1F              DB 10H,10H,1FH,10H,10H,10H,10H
+  047D'   10 10 10      
+  0480'   10            
+                        
+  0481'   10 10 10              DB 10H,10H,10H,0FFH,10H,10H,10H
+  0484'   FF 10 10      
+  0487'   10            
+                        
+  0488'   10 10 10              DB 10H,10H,10H,10H,10H,10H,10H
+  048B'   10 10 10      
+  048E'   10            
+                        
+  048F'   10 10 00              DB 10H,10H,00H,00H,00H,0FFH,00H
+  0492'   00 00 FF      
+  0495'   00            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-18
+
+
+                        
+  0496'   00 00 00              DB 00H,00H,00H,00H,00H,00H,1FH
+  0499'   00 00 00      
+  049C'   1F            
+                        
+  049D'   10 10 10              DB 10H,10H,10H,10H,00H,00H,00H
+  04A0'   10 00 00      
+  04A3'   00            
+                        
+  04A4'   F0 10 10              DB 0F0H,10H,10H,10H,10H,10H,10H
+  04A7'   10 10 10      
+  04AA'   10            
+                        
+  04AB'   10 1F 00              DB 10H,1FH,00H,00H,00H,00H,10H
+  04AE'   00 00 00      
+  04B1'   10            
+                        
+  04B2'   10 10 F0              DB 10H,10H,0F0H,00H,00H,00H,00H
+  04B5'   00 00 00      
+  04B8'   00            
+                        
+  04B9'   81 42 24              DB 81H,42H,24H,18H,18H,24H,42H
+  04BC'   18 18 24      
+  04BF'   42            
+                        
+  04C0'   81 10 7C              DB 81H,10H,7CH,10H,10H,28H,44H
+  04C3'   10 10 28      
+  04C6'   44            
+                        
+  04C7'   82 00 10              DB 82H,00H,10H,10H,0FEH,92H,0FEH
+  04CA'   10 FE 92      
+  04CD'   FE            
+                        
+  04CE'   10 10 00              DB 10H,10H,00H,10H,10H,54H,54H
+  04D1'   10 10 54      
+  04D4'   54            
+                        
+  04D5'   92 10 30              DB 92H,10H,30H,00H,00H,00H,00H
+  04D8'   00 00 00      
+  04DB'   00            
+                        
+  04DC'   00 00 00              DB 00H,00H,00H,00H,00H,20H,20H
+  04DF'   00 00 20      
+  04E2'   20            
+                        
+  04E3'   20 20 00              DB 20H,20H,00H,00H,20H,00H,50H
+  04E6'   00 20 00      
+  04E9'   50            
+                        
+  04EA'   50 50 00              DB 50H,50H,00H,00H,00H,00H,00H
+  04ED'   00 00 00      
+  04F0'   00            
+                        
+  04F1'   50 50 F8              DB 50H,50H,0F8H,50H,0F8H,50H,50H
+  04F4'   50 F8 50      
+  04F7'   50            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-19
+
+
+                        
+  04F8'   00 20 78              DB 00H,20H,78H,0A0H,70H,28H,0F0H
+  04FB'   A0 70 28      
+  04FE'   F0            
+                        
+  04FF'   20 00 C0              DB 20H,00H,0C0H,0C8H,10H,20H,40H
+  0502'   C8 10 20      
+  0505'   40            
+                        
+  0506'   98 18 00              DB 98H,18H,00H,40H,0A0H,40H,0A8H
+  0509'   40 A0 40      
+  050C'   A8            
+                        
+  050D'   90 98 60              DB 90H,98H,60H,00H,10H,20H,40H
+  0510'   00 10 20      
+  0513'   40            
+                        
+  0514'   00 00 00              DB 00H,00H,00H,00H,00H,10H,20H
+  0517'   00 00 10      
+  051A'   20            
+                        
+  051B'   40 40 40              DB 40H,40H,40H,20H,10H,00H,40H
+  051E'   20 10 00      
+  0521'   40            
+                        
+  0522'   20 10 10              DB 20H,10H,10H,10H,20H,40H,00H
+  0525'   10 20 40      
+  0528'   00            
+                        
+  0529'   20 A8 70              DB 20H,0A8H,70H,20H,70H,0A8H,20H
+  052C'   20 70 A8      
+  052F'   20            
+                        
+  0530'   00 00 20              DB 00H,00H,20H,20H,0F8H,20H,20H
+  0533'   20 F8 20      
+  0536'   20            
+                        
+  0537'   00 00 00              DB 00H,00H,00H,00H,00H,00H,00H
+  053A'   00 00 00      
+  053D'   00            
+                        
+  053E'   20 20 40              DB 20H,20H,40H,00H,00H,00H,78H
+  0541'   00 00 00      
+  0544'   78            
+                        
+  0545'   00 00 00              DB 00H,00H,00H,00H,00H,00H,00H
+  0548'   00 00 00      
+  054B'   00            
+                        
+  054C'   00 00 60              DB 00H,00H,60H,60H,00H,00H,00H
+  054F'   60 00 00      
+  0552'   00            
+                        
+  0553'   08 10 20              DB 08H,10H,20H,40H,80H,00H,70H
+  0556'   40 80 00      
+  0559'   70            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-20
+
+
+                        
+  055A'   88 98 A8              DB 88H,98H,0A8H,0C8H,88H,70H,00H
+  055D'   C8 88 70      
+  0560'   00            
+                        
+  0561'   20 60 A0              DB 20H,60H,0A0H,20H,20H,20H,0F8H
+  0564'   20 20 20      
+  0567'   F8            
+                        
+  0568'   00 70 88              DB 00H,70H,88H,08H,10H,60H,80H
+  056B'   08 10 60      
+  056E'   80            
+                        
+  056F'   F8 00 70              DB 0F8H,00H,70H,88H,08H,30H,08H
+  0572'   88 08 30      
+  0575'   08            
+                        
+  0576'   88 70 00              DB 88H,70H,00H,10H,30H,50H,90H
+  0579'   10 30 50      
+  057C'   90            
+                        
+  057D'   F8 10 10              DB 0F8H,10H,10H,00H,0F8H,80H,0E0H
+  0580'   00 F8 80      
+  0583'   E0            
+                        
+  0584'   10 08 10              DB 10H,08H,10H,0E0H,00H,30H,40H
+  0587'   E0 00 30      
+  058A'   40            
+                        
+  058B'   80 F0 88              DB 80H,0F0H,88H,88H,70H,00H,0F8H
+  058E'   88 70 00      
+  0591'   F8            
+                        
+  0592'   88 10 20              DB 88H,10H,20H,20H,20H,20H,00H
+  0595'   20 20 20      
+  0598'   00            
+                        
+  0599'   70 88 88              DB 70H,88H,88H,70H,88H,88H,70H
+  059C'   70 88 88      
+  059F'   70            
+                        
+  05A0'   00 70 88              DB 00H,70H,88H,88H,78H,08H,10H
+  05A3'   88 78 08      
+  05A6'   10            
+                        
+  05A7'   60 00 00              DB 60H,00H,00H,00H,20H,00H,00H
+  05AA'   00 20 00      
+  05AD'   00            
+                        
+  05AE'   20 00 00              DB 20H,00H,00H,00H,00H,20H,00H
+  05B1'   00 00 20      
+  05B4'   00            
+                        
+  05B5'   00 20 20              DB 00H,20H,20H,40H,18H,30H,60H
+  05B8'   40 18 30      
+  05BB'   60            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-21
+
+
+                        
+  05BC'   C0 60 30              DB 0C0H,60H,30H,18H,00H,00H,00H
+  05BF'   18 00 00      
+  05C2'   00            
+                        
+  05C3'   F8 00 F8              DB 0F8H,00H,0F8H,00H,00H,00H,0C0H
+  05C6'   00 00 00      
+  05C9'   C0            
+                        
+  05CA'   60 30 18              DB 60H,30H,18H,30H,60H,0C0H,00H
+  05CD'   30 60 C0      
+  05D0'   00            
+                        
+  05D1'   70 88 08              DB 70H,88H,08H,10H,20H,00H,20H
+  05D4'   10 20 00      
+  05D7'   20            
+                        
+  05D8'   00 70 88              DB 00H,70H,88H,08H,68H,0A8H,0A8H
+  05DB'   08 68 A8      
+  05DE'   A8            
+                        
+  05DF'   70 00 20              DB 70H,00H,20H,50H,88H,88H,0F8H
+  05E2'   50 88 88      
+  05E5'   F8            
+                        
+  05E6'   88 88 00              DB 88H,88H,00H,0F0H,48H,48H,70H
+  05E9'   F0 48 48      
+  05EC'   70            
+                        
+  05ED'   48 48 F0              DB 48H,48H,0F0H,00H,30H,48H,80H
+  05F0'   00 30 48      
+  05F3'   80            
+                        
+  05F4'   80 80 48              DB 80H,80H,48H,30H,00H,0E0H,50H
+  05F7'   30 00 E0      
+  05FA'   50            
+                        
+  05FB'   48 48 48              DB 48H,48H,48H,50H,0E0H,00H,0F8H
+  05FE'   50 E0 00      
+  0601'   F8            
+                        
+  0602'   80 80 F0              DB 80H,80H,0F0H,80H,80H,0F8H,00H
+  0605'   80 80 F8      
+  0608'   00            
+                        
+  0609'   F8 80 80              DB 0F8H,80H,80H,0F0H,80H,80H,80H
+  060C'   F0 80 80      
+  060F'   80            
+                        
+  0610'   00 70 88              DB 00H,70H,88H,80H,0B8H,88H,88H
+  0613'   80 B8 88      
+  0616'   88            
+                        
+  0617'   70 00 88              DB 70H,00H,88H,88H,88H,0F8H,88H
+  061A'   88 88 F8      
+  061D'   88            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-22
+
+
+                        
+  061E'   88 88 00              DB 88H,88H,00H,70H,20H,20H,20H
+  0621'   70 20 20      
+  0624'   20            
+                        
+  0625'   20 20 70              DB 20H,20H,70H,00H,38H,10H,10H
+  0628'   00 38 10      
+  062B'   10            
+                        
+  062C'   10 90 90              DB 10H,90H,90H,60H,00H,88H,90H
+  062F'   60 00 88      
+  0632'   90            
+                        
+  0633'   A0 C0 A0              DB 0A0H,0C0H,0A0H,90H,88H,00H,80H
+  0636'   90 88 00      
+  0639'   80            
+                        
+  063A'   80 80 80              DB 80H,80H,80H,80H,80H,0F8H,00H
+  063D'   80 80 F8      
+  0640'   00            
+                        
+  0641'   88 D8 A8              DB 88H,0D8H,0A8H,0A8H,88H,88H,88H
+  0644'   A8 88 88      
+  0647'   88            
+                        
+  0648'   00 88 C8              DB 00H,88H,0C8H,0C8H,0A8H,98H,98H
+  064B'   C8 A8 98      
+  064E'   98            
+                        
+  064F'   88 00 70              DB 88H,00H,70H,88H,88H,88H,88H
+  0652'   88 88 88      
+  0655'   88            
+                        
+  0656'   88 70 00              DB 88H,70H,00H,0F0H,88H,88H,0F0H
+  0659'   F0 88 88      
+  065C'   F0            
+                        
+  065D'   80 80 80              DB 80H,80H,80H,00H,70H,88H,88H
+  0660'   00 70 88      
+  0663'   88            
+                        
+  0664'   88 A8 90              DB 88H,0A8H,90H,68H,00H,0F0H,88H
+  0667'   68 00 F0      
+  066A'   88            
+                        
+  066B'   88 F0 A0              DB 88H,0F0H,0A0H,90H,88H,00H,70H
+  066E'   90 88 00      
+  0671'   70            
+                        
+  0672'   88 80 70              DB 88H,80H,70H,08H,88H,70H,00H
+  0675'   08 88 70      
+  0678'   00            
+                        
+  0679'   F8 20 20              DB 0F8H,20H,20H,20H,20H,20H,20H
+  067C'   20 20 20      
+  067F'   20            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-23
+
+
+                        
+  0680'   00 88 88              DB 00H,88H,88H,88H,88H,88H,88H
+  0683'   88 88 88      
+  0686'   88            
+                        
+  0687'   70 00 88              DB 70H,00H,88H,88H,88H,88H,50H
+  068A'   88 88 88      
+  068D'   50            
+                        
+  068E'   50 20 00              DB 50H,20H,00H,88H,88H,88H,0A8H
+  0691'   88 88 88      
+  0694'   A8            
+                        
+  0695'   A8 D8 88              DB 0A8H,0D8H,88H,00H,88H,88H,50H
+  0698'   00 88 88      
+  069B'   50            
+                        
+  069C'   20 50 88              DB 20H,50H,88H,88H,00H,88H,88H
+  069F'   88 00 88      
+  06A2'   88            
+                        
+  06A3'   88 70 20              DB 88H,70H,20H,20H,20H,00H,0F8H
+  06A6'   20 20 00      
+  06A9'   F8            
+                        
+  06AA'   08 10 20              DB 08H,10H,20H,40H,80H,0F8H,00H
+  06AD'   40 80 F8      
+  06B0'   00            
+                        
+  06B1'   70 40 40              DB 70H,40H,40H,40H,40H,40H,70H
+  06B4'   40 40 40      
+  06B7'   70            
+                        
+  06B8'   00 88 50              DB 00H,88H,50H,20H,70H,20H,70H
+  06BB'   20 70 20      
+  06BE'   70            
+                        
+  06BF'   20 00 70              DB 20H,00H,70H,10H,10H,10H,10H
+  06C2'   10 10 10      
+  06C5'   10            
+                        
+  06C6'   10 70 00              DB 10H,70H,00H,20H,50H,88H,00H
+  06C9'   20 50 88      
+  06CC'   00            
+                        
+  06CD'   00 00 00              DB 00H,00H,00H,00H,00H,00H,00H
+  06D0'   00 00 00      
+  06D3'   00            
+                        
+  06D4'   00 00 00              DB 00H,00H,00H,0F8H,00H,40H,20H
+  06D7'   F8 00 40      
+  06DA'   20            
+                        
+  06DB'   10 00 00              DB 10H,00H,00H,00H,00H,00H,00H
+  06DE'   00 00 00      
+  06E1'   00            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-24
+
+
+                        
+  06E2'   00 70 08              DB 00H,70H,08H,78H,88H,78H,00H
+  06E5'   78 88 78      
+  06E8'   00            
+                        
+  06E9'   80 80 B0              DB 80H,80H,0B0H,0C8H,88H,0C8H,0B0H
+  06EC'   C8 88 C8      
+  06EF'   B0            
+                        
+  06F0'   00 00 00              DB 00H,00H,00H,70H,88H,80H,88H
+  06F3'   70 88 80      
+  06F6'   88            
+                        
+  06F7'   70 00 08              DB 70H,00H,08H,08H,68H,98H,88H
+  06FA'   08 68 98      
+  06FD'   88            
+                        
+  06FE'   98 68 00              DB 98H,68H,00H,00H,00H,70H,88H
+  0701'   00 00 70      
+  0704'   88            
+                        
+  0705'   F8 80 70              DB 0F8H,80H,70H,00H,10H,28H,20H
+  0708'   00 10 28      
+  070B'   20            
+                        
+  070C'   F8 20 20              DB 0F8H,20H,20H,20H,00H,00H,00H
+  070F'   20 00 00      
+  0712'   00            
+                        
+  0713'   68 98 98              DB 68H,98H,98H,68H,08H,70H,80H
+  0716'   68 08 70      
+  0719'   80            
+                        
+  071A'   80 F0 88              DB 80H,0F0H,88H,88H,88H,88H,00H
+  071D'   88 88 88      
+  0720'   00            
+                        
+  0721'   20 00 60              DB 20H,00H,60H,20H,20H,20H,70H
+  0724'   20 20 20      
+  0727'   70            
+                        
+  0728'   00 10 00              DB 00H,10H,00H,30H,10H,10H,10H
+  072B'   30 10 10      
+  072E'   10            
+                        
+  072F'   90 60 40              DB 90H,60H,40H,40H,48H,50H,60H
+  0732'   40 48 50      
+  0735'   60            
+                        
+  0736'   50 48 00              DB 50H,48H,00H,60H,20H,20H,20H
+  0739'   60 20 20      
+  073C'   20            
+                        
+  073D'   20 20 70              DB 20H,20H,70H,00H,00H,00H,0D0H
+  0740'   00 00 00      
+  0743'   D0            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-25
+
+
+                        
+  0744'   A8 A8 A8              DB 0A8H,0A8H,0A8H,0A8H,00H,00H,00H
+  0747'   A8 00 00      
+  074A'   00            
+                        
+  074B'   B0 C8 88              DB 0B0H,0C8H,88H,88H,88H,00H,00H
+  074E'   88 88 00      
+  0751'   00            
+                        
+  0752'   00 70 88              DB 00H,70H,88H,88H,88H,70H,00H
+  0755'   88 88 70      
+  0758'   00            
+                        
+  0759'   00 00 B0              DB 00H,00H,0B0H,0C8H,0C8H,0B0H,80H
+  075C'   C8 C8 B0      
+  075F'   80            
+                        
+  0760'   80 00 00              DB 80H,00H,00H,68H,98H,98H,68H
+  0763'   68 98 98      
+  0766'   68            
+                        
+  0767'   08 08 00              DB 08H,08H,00H,00H,0B0H,0C8H,80H
+  076A'   00 B0 C8      
+  076D'   80            
+                        
+  076E'   80 80 00              DB 80H,80H,00H,00H,00H,78H,80H
+  0771'   00 00 78      
+  0774'   80            
+                        
+  0775'   F0 08 F0              DB 0F0H,08H,0F0H,00H,40H,40H,0F0H
+  0778'   00 40 40      
+  077B'   F0            
+                        
+  077C'   40 40 48              DB 40H,40H,48H,30H,00H,00H,00H
+  077F'   30 00 00      
+  0782'   00            
+                        
+  0783'   90 90 90              DB 90H,90H,90H,90H,68H,00H,00H
+  0786'   90 68 00      
+  0789'   00            
+                        
+  078A'   00 88 88              DB 00H,88H,88H,88H,50H,20H,00H
+  078D'   88 50 20      
+  0790'   00            
+                        
+  0791'   00 00 88              DB 00H,00H,88H,0A8H,0A8H,0A8H,50H
+  0794'   A8 A8 A8      
+  0797'   50            
+                        
+  0798'   00 00 00              DB 00H,00H,00H,88H,50H,20H,50H
+  079B'   88 50 20      
+  079E'   50            
+                        
+  079F'   88 00 00              DB 88H,00H,00H,00H,88H,88H,98H
+  07A2'   00 88 88      
+  07A5'   98            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-26
+
+
+                        
+  07A6'   68 08 70              DB 68H,08H,70H,00H,00H,0F8H,10H
+  07A9'   00 00 F8      
+  07AC'   10            
+                        
+  07AD'   20 40 F8              DB 20H,40H,0F8H,00H,18H,20H,20H
+  07B0'   00 18 20      
+  07B3'   20            
+                        
+  07B4'   40 20 20              DB 40H,20H,20H,18H,00H,20H,20H
+  07B7'   18 00 20      
+  07BA'   20            
+                        
+  07BB'   20 00 20              DB 20H,00H,20H,20H,20H,00H,0C0H
+  07BE'   20 20 00      
+  07C1'   C0            
+                        
+  07C2'   20 20 10              DB 20H,20H,10H,20H,20H,0C0H,00H
+  07C5'   20 20 C0      
+  07C8'   00            
+                        
+  07C9'   40 A8 10              DB 40H,0A8H,10H,00H,00H,00H,00H
+  07CC'   00 00 00      
+  07CF'   00            
+                        
+  07D0'   00 00 00              DB 00H,00H,00H,00H,00H,00H,00H
+  07D3'   00 00 00      
+  07D6'   00            
+                        
+  07D7'   00 00 10              DB 00H,00H,10H,38H,7CH,0FEH,0FEH
+  07DA'   38 7C FE      
+  07DD'   FE            
+                        
+  07DE'   38 7C 00              DB 38H,7CH,00H,6CH,0FEH,0FEH,0FEH
+  07E1'   6C FE FE      
+  07E4'   FE            
+                        
+  07E5'   7C 38 10              DB 7CH,38H,10H,00H,38H,38H,0FEH
+  07E8'   00 38 38      
+  07EB'   FE            
+                        
+  07EC'   FE D6 10              DB 0FEH,0D6H,10H,7CH,00H,10H,38H
+  07EF'   7C 00 10      
+  07F2'   38            
+                        
+  07F3'   7C FE 7C              DB 7CH,0FEH,7CH,38H,10H,00H,00H
+  07F6'   38 10 00      
+  07F9'   00            
+                        
+  07FA'   78 84 84              DB 78H,84H,84H,84H,84H,78H,00H
+  07FD'   84 84 78      
+  0800'   00            
+                        
+  0801'   00 78 FC              DB 00H,78H,0FCH,0FCH,0FCH,0FCH,78H
+  0804'   FC FC FC      
+  0807'   78            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-27
+
+
+                        
+  0808'   00 40 FE              DB 00H,40H,0FEH,48H,70H,48H,82H
+  080B'   48 70 48      
+  080E'   82            
+                        
+  080F'   7C 00 00              DB 7CH,00H,00H,00H,10H,7EH,3CH
+  0812'   00 10 7E      
+  0815'   3C            
+                        
+  0816'   5A 34 00              DB 5AH,34H,00H,00H,00H,40H,42H
+  0819'   00 00 40      
+  081C'   42            
+                        
+  081D'   42 52 20              DB 42H,52H,20H,00H,00H,00H,1CH
+  0820'   00 00 00      
+  0823'   1C            
+                        
+  0824'   1C 22 02              DB 1CH,22H,02H,0CH,00H,00H,00H
+  0827'   0C 00 00      
+  082A'   00            
+                        
+  082B'   18 7E 18              DB 18H,7EH,18H,30H,6EH,00H,00H
+  082E'   30 6E 00      
+  0831'   00            
+                        
+  0832'   00 12 7E              DB 00H,12H,7EH,3CH,52H,34H,00H
+  0835'   3C 52 34      
+  0838'   00            
+                        
+  0839'   00 00 28              DB 00H,00H,28H,7CH,2AH,22H,24H
+  083C'   7C 2A 22      
+  083F'   24            
+                        
+  0840'   00 00 00              DB 00H,00H,00H,08H,5CH,6AH,0CH
+  0843'   08 5C 6A      
+  0846'   0C            
+                        
+  0847'   30 00 00              DB 30H,00H,00H,00H,08H,0EH,38H
+  084A'   00 08 0E      
+  084D'   38            
+                        
+  084E'   4C 3A 00              DB 4CH,3AH,00H,00H,00H,00H,3CH
+  0851'   00 00 00      
+  0854'   3C            
+                        
+  0855'   02 02 1C              DB 02H,02H,1CH,00H,00H,00H,00H
+  0858'   00 00 00      
+  085B'   00            
+                        
+  085C'   00 00 00              DB 00H,00H,00H,00H,00H,20H,0FEH
+  085F'   00 00 20      
+  0862'   FE            
+                        
+  0863'   20 7C AA              DB 20H,7CH,0AAH,0B2H,64H,00H,00H
+  0866'   B2 64 00      
+  0869'   00            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-28
+
+
+                        
+  086A'   80 82 82              DB 80H,82H,82H,82H,90H,60H,00H
+  086D'   82 90 60      
+  0870'   00            
+                        
+  0871'   1C 00 7C              DB 1CH,00H,7CH,02H,02H,04H,18H
+  0874'   02 02 04      
+  0877'   18            
+                        
+  0878'   00 38 00              DB 00H,38H,00H,0FEH,08H,30H,50H
+  087B'   FE 08 30      
+  087E'   50            
+                        
+  087F'   9E 00 20              DB 9EH,00H,20H,0FAH,22H,7CH,0A2H
+  0882'   FA 22 7C      
+  0885'   A2            
+                        
+  0886'   A2 4C 00              DB 0A2H,4CH,00H,40H,44H,0F2H,4AH
+  0889'   40 44 F2      
+  088C'   4A            
+                        
+  088D'   48 88 30              DB 48H,88H,30H,00H,10H,0FCH,08H
+  0890'   00 10 FC      
+  0893'   08            
+                        
+  0894'   3E 04 80              DB 3EH,04H,80H,7CH,00H,18H,18H
+  0897'   7C 00 18      
+  089A'   18            
+                        
+  089B'   30 60 60              DB 30H,60H,60H,30H,18H,00H,04H
+  089E'   30 18 00      
+  08A1'   04            
+                        
+  08A2'   84 BE 84              DB 84H,0BEH,84H,84H,84H,48H,00H
+  08A5'   84 84 48      
+  08A8'   00            
+                        
+  08A9'   00 FC 02              DB 00H,0FCH,02H,00H,40H,80H,7EH
+  08AC'   00 40 80      
+  08AF'   7E            
+                        
+  08B0'   00 10 16              DB 00H,10H,16H,0F8H,08H,7CH,80H
+  08B3'   F8 08 7C      
+  08B6'   80            
+                        
+  08B7'   78 00 80              DB 78H,00H,80H,80H,80H,80H,84H
+  08BA'   80 80 80      
+  08BD'   84            
+                        
+  08BE'   88 70 00              DB 88H,70H,00H,08H,0FEH,08H,38H
+  08C1'   08 FE 08      
+  08C4'   38            
+                        
+  08C5'   48 38 08              DB 48H,38H,08H,00H,04H,44H,0FEH
+  08C8'   00 04 44      
+  08CB'   FE            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-29
+
+
+                        
+  08CC'   44 44 40              DB 44H,44H,40H,3EH,00H,64H,28H
+  08CF'   3E 00 64      
+  08D2'   28            
+                        
+  08D3'   30 FE 20              DB 30H,0FEH,20H,40H,3CH,00H,00H
+  08D6'   40 3C 00      
+  08D9'   00            
+                        
+  08DA'   00 00 00              DB 00H,00H,00H,00H,00H,00H,00H
+  08DD'   00 00 00      
+  08E0'   00            
+                        
+  08E1'   00 00 00              DB 00H,00H,00H,00H,60H,90H,60H
+  08E4'   00 60 90      
+  08E7'   60            
+                        
+  08E8'   00 38 20              DB 00H,38H,20H,20H,20H,00H,00H
+  08EB'   20 20 00      
+  08EE'   00            
+                        
+  08EF'   00 00 00              DB 00H,00H,00H,00H,00H,20H,20H
+  08F2'   00 00 20      
+  08F5'   20            
+                        
+  08F6'   20 E0 00              DB 20H,0E0H,00H,00H,00H,00H,00H
+  08F9'   00 00 00      
+  08FC'   00            
+                        
+  08FD'   80 40 20              DB 80H,40H,20H,00H,00H,00H,00H
+  0900'   00 00 00      
+  0903'   00            
+                        
+  0904'   30 30 00              DB 30H,30H,00H,00H,00H,0F8H,08H
+  0907'   00 00 F8      
+  090A'   08            
+                        
+  090B'   F8 08 10              DB 0F8H,08H,10H,20H,40H,00H,00H
+  090E'   20 40 00      
+  0911'   00            
+                        
+  0912'   00 F0 10              DB 00H,0F0H,10H,60H,40H,80H,00H
+  0915'   60 40 80      
+  0918'   00            
+                        
+  0919'   00 10 20              DB 00H,10H,20H,60H,0A0H,20H,20H
+  091C'   60 A0 20      
+  091F'   20            
+                        
+  0920'   00 00 20              DB 00H,00H,20H,0F0H,90H,10H,20H
+  0923'   F0 90 10      
+  0926'   20            
+                        
+  0927'   40 00 00              DB 40H,00H,00H,00H,0F0H,20H,20H
+  092A'   00 F0 20      
+  092D'   20            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-30
+
+
+                        
+  092E'   20 F0 00              DB 20H,0F0H,00H,00H,20H,0F0H,60H
+  0931'   00 20 F0      
+  0934'   60            
+                        
+  0935'   A0 A0 20              DB 0A0H,0A0H,20H,00H,00H,40H,0F8H
+  0938'   00 00 40      
+  093B'   F8            
+                        
+  093C'   48 50 40              DB 48H,50H,40H,40H,00H,00H,00H
+  093F'   40 00 00      
+  0942'   00            
+                        
+  0943'   70 10 10              DB 70H,10H,10H,10H,0F8H,00H,00H
+  0946'   10 F8 00      
+  0949'   00            
+                        
+  094A'   00 F0 10              DB 00H,0F0H,10H,0F0H,10H,0F0H,00H
+  094D'   F0 10 F0      
+  0950'   00            
+                        
+  0951'   00 00 A8              DB 00H,00H,0A8H,0A8H,08H,10H,20H
+  0954'   A8 08 10      
+  0957'   20            
+                        
+  0958'   00 00 00              DB 00H,00H,00H,00H,0F8H,00H,00H
+  095B'   00 F8 00      
+  095E'   00            
+                        
+  095F'   00 00 F8              DB 00H,00H,0F8H,08H,28H,30H,20H
+  0962'   08 28 30      
+  0965'   20            
+                        
+  0966'   20 40 00              DB 20H,40H,00H,08H,10H,20H,60H
+  0969'   08 10 20      
+  096C'   60            
+                        
+  096D'   A0 20 20              DB 0A0H,20H,20H,00H,20H,0F8H,88H
+  0970'   00 20 F8      
+  0973'   88            
+                        
+  0974'   88 08 10              DB 88H,08H,10H,20H,00H,00H,0F8H
+  0977'   20 00 00      
+  097A'   F8            
+                        
+  097B'   20 20 20              DB 20H,20H,20H,20H,0F8H,00H,10H
+  097E'   20 F8 00      
+  0981'   10            
+                        
+  0982'   F8 10 30              DB 0F8H,10H,30H,50H,90H,10H,00H
+  0985'   50 90 10      
+  0988'   00            
+                        
+  0989'   20 F8 28              DB 20H,0F8H,28H,28H,28H,48H,88H
+  098C'   28 28 48      
+  098F'   88            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-31
+
+
+                        
+  0990'   00 20 F8              DB 00H,20H,0F8H,20H,0F8H,20H,20H
+  0993'   20 F8 20      
+  0996'   20            
+                        
+  0997'   20 00 78              DB 20H,00H,78H,48H,88H,08H,08H
+  099A'   48 88 08      
+  099D'   08            
+                        
+  099E'   10 20 00              DB 10H,20H,00H,40H,78H,50H,90H
+  09A1'   40 78 50      
+  09A4'   90            
+                        
+  09A5'   10 10 20              DB 10H,10H,20H,00H,00H,0F8H,08H
+  09A8'   00 00 F8      
+  09AB'   08            
+                        
+  09AC'   08 08 08              DB 08H,08H,08H,0F8H,00H,50H,0F8H
+  09AF'   F8 00 50      
+  09B2'   F8            
+                        
+  09B3'   50 50 10              DB 50H,50H,10H,10H,20H,00H,00H
+  09B6'   10 20 00      
+  09B9'   00            
+                        
+  09BA'   C0 08 C8              DB 0C0H,08H,0C8H,08H,10H,0E0H,00H
+  09BD'   08 10 E0      
+  09C0'   00            
+                        
+  09C1'   00 F8 08              DB 00H,0F8H,08H,10H,20H,50H,88H
+  09C4'   10 20 50      
+  09C7'   88            
+                        
+  09C8'   00 40 F8              DB 00H,40H,0F8H,48H,50H,40H,40H
+  09CB'   48 50 40      
+  09CE'   40            
+                        
+  09CF'   38 00 88              DB 38H,00H,88H,88H,48H,08H,10H
+  09D2'   88 48 08      
+  09D5'   10            
+                        
+  09D6'   20 40 00              DB 20H,40H,00H,78H,48H,78H,88H
+  09D9'   78 48 78      
+  09DC'   88            
+                        
+  09DD'   08 10 20              DB 08H,10H,20H,00H,10H,0E0H,20H
+  09E0'   00 10 E0      
+  09E3'   20            
+                        
+  09E4'   F8 20 20              DB 0F8H,20H,20H,40H,00H,0A8H,0A8H
+  09E7'   40 00 A8      
+  09EA'   A8            
+                        
+  09EB'   A8 08 08              DB 0A8H,08H,08H,10H,20H,00H,70H
+  09EE'   10 20 00      
+  09F1'   70            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-32
+
+
+                        
+  09F2'   00 F8 20              DB 00H,0F8H,20H,20H,20H,40H,00H
+  09F5'   20 20 40      
+  09F8'   00            
+                        
+  09F9'   40 40 60              DB 40H,40H,60H,50H,48H,40H,40H
+  09FC'   50 48 40      
+  09FF'   40            
+                        
+  0A00'   00 20 F8              DB 00H,20H,0F8H,20H,20H,20H,20H
+  0A03'   20 20 20      
+  0A06'   20            
+                        
+  0A07'   40 00 00              DB 40H,00H,00H,70H,00H,00H,00H
+  0A0A'   70 00 00      
+  0A0D'   00            
+                        
+  0A0E'   00 F8 00              DB 00H,0F8H,00H,00H,0F8H,08H,0D0H
+  0A11'   00 F8 08      
+  0A14'   D0            
+                        
+  0A15'   20 50 88              DB 20H,50H,88H,00H,20H,0F8H,08H
+  0A18'   00 20 F8      
+  0A1B'   08            
+                        
+  0A1C'   30 E8 20              DB 30H,0E8H,20H,20H,00H,08H,08H
+  0A1F'   20 00 08      
+  0A22'   08            
+                        
+  0A23'   08 10 20              DB 08H,10H,20H,40H,80H,00H,20H
+  0A26'   40 80 00      
+  0A29'   20            
+                        
+  0A2A'   10 48 48              DB 10H,48H,48H,48H,48H,88H,00H
+  0A2D'   48 48 88      
+  0A30'   00            
+                        
+  0A31'   80 80 F8              DB 80H,80H,0F8H,80H,80H,80H,78H
+  0A34'   80 80 80      
+  0A37'   78            
+                        
+  0A38'   00 F8 08              DB 00H,0F8H,08H,08H,08H,10H,20H
+  0A3B'   08 08 10      
+  0A3E'   20            
+                        
+  0A3F'   40 00 00              DB 40H,00H,00H,40H,0A0H,10H,08H
+  0A42'   40 A0 10      
+  0A45'   08            
+                        
+  0A46'   08 00 00              DB 08H,00H,00H,20H,0F8H,20H,20H
+  0A49'   20 F8 20      
+  0A4C'   20            
+                        
+  0A4D'   A8 A8 20              DB 0A8H,0A8H,20H,00H,00H,0F8H,08H
+  0A50'   00 00 F8      
+  0A53'   08            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-33
+
+
+                        
+  0A54'   08 50 20              DB 08H,50H,20H,10H,00H,0F0H,00H
+  0A57'   10 00 F0      
+  0A5A'   00            
+                        
+  0A5B'   60 00 00              DB 60H,00H,00H,0F0H,08H,00H,10H
+  0A5E'   F0 08 00      
+  0A61'   10            
+                        
+  0A62'   20 40 80              DB 20H,40H,80H,90H,88H,0F8H,00H
+  0A65'   90 88 F8      
+  0A68'   00            
+                        
+  0A69'   08 08 08              DB 08H,08H,08H,50H,20H,50H,80H
+  0A6C'   50 20 50      
+  0A6F'   80            
+                        
+  0A70'   00 78 20              DB 00H,78H,20H,0F8H,20H,20H,20H
+  0A73'   F8 20 20      
+  0A76'   20            
+                        
+  0A77'   18 00 40              DB 18H,00H,40H,0F8H,48H,48H,50H
+  0A7A'   F8 48 48      
+  0A7D'   50            
+                        
+  0A7E'   40 40 00              DB 40H,40H,00H,00H,70H,10H,10H
+  0A81'   00 70 10      
+  0A84'   10            
+                        
+  0A85'   10 10 F8              DB 10H,10H,0F8H,00H,00H,0F8H,08H
+  0A88'   00 00 F8      
+  0A8B'   08            
+                        
+  0A8C'   F8 08 08              DB 0F8H,08H,08H,0F8H,00H,70H,00H
+  0A8F'   F8 00 70      
+  0A92'   00            
+                        
+  0A93'   F8 08 08              DB 0F8H,08H,08H,10H,20H,00H,48H
+  0A96'   10 20 00      
+  0A99'   48            
+                        
+  0A9A'   48 48 48              DB 48H,48H,48H,48H,10H,20H,00H
+  0A9D'   48 10 20      
+  0AA0'   00            
+                        
+  0AA1'   10 50 50              DB 10H,50H,50H,50H,50H,58H,90H
+  0AA4'   50 50 58      
+  0AA7'   90            
+                        
+  0AA8'   00 40 40              DB 00H,40H,40H,40H,48H,48H,50H
+  0AAB'   40 48 48      
+  0AAE'   50            
+                        
+  0AAF'   60 00 00              DB 60H,00H,00H,0F8H,88H,88H,88H
+  0AB2'   F8 88 88      
+  0AB5'   88            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-34
+
+
+                        
+  0AB6'   88 F8 00              DB 88H,0F8H,00H,0F8H,88H,88H,08H
+  0AB9'   F8 88 88      
+  0ABC'   08            
+                        
+  0ABD'   08 10 20              DB 08H,10H,20H,00H,00H,0C0H,00H
+  0AC0'   00 00 C0      
+  0AC3'   00            
+                        
+  0AC4'   08 08 10              DB 08H,08H,10H,0E0H,00H,90H,48H
+  0AC7'   E0 00 90      
+  0ACA'   48            
+                        
+  0ACB'   00 00 00              DB 00H,00H,00H,00H,00H,00H,60H
+  0ACE'   00 00 00      
+  0AD1'   60            
+                        
+  0AD2'   90 60 00              DB 90H,60H,00H,00H,00H,00H,00H
+  0AD5'   00 00 00      
+  0AD8'   00            
+                        
+  0AD9'   40 FE 40              DB 40H,0FEH,40H,5EH,80H,0A0H,9EH
+  0ADC'   5E 80 A0      
+  0ADF'   9E            
+                        
+  0AE0'   00 20 FE              DB 00H,20H,0FEH,40H,0F8H,04H,04H
+  0AE3'   40 F8 04      
+  0AE6'   04            
+                        
+  0AE7'   78 00 00              DB 78H,00H,00H,00H,0FCH,02H,02H
+  0AEA'   00 FC 02      
+  0AED'   02            
+                        
+  0AEE'   04 38 00              DB 04H,38H,00H,00H,0FEH,0CH,30H
+  0AF1'   00 FE 0C      
+  0AF4'   30            
+                        
+  0AF5'   40 40 38              DB 40H,40H,38H,00H,10H,12H,1CH
+  0AF8'   00 10 12      
+  0AFB'   1C            
+                        
+  0AFC'   30 40 40              DB 30H,40H,40H,3EH,00H,24H,0F2H
+  0AFF'   3E 00 24      
+  0B02'   F2            
+                        
+  0B03'   48 48 9C              DB 48H,48H,9CH,0AAH,10H,00H,80H
+  0B06'   AA 10 00      
+  0B09'   80            
+                        
+  0B0A'   9E 80 80              DB 9EH,80H,80H,0A0H,0BEH,0C0H,00H
+  0B0D'   A0 BE C0      
+  0B10'   00            
+                        
+  0B11'   44 4C 7A              DB 44H,4CH,7AH,0AAH,0A6H,0AAH,6CH
+  0B14'   AA A6 AA      
+  0B17'   6C            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-35
+
+
+                        
+  0B18'   00 40 EC              DB 00H,40H,0ECH,52H,62H,0CEH,4AH
+  0B1B'   52 62 CE      
+  0B1E'   4A            
+                        
+  0B1F'   4C 00 00              DB 4CH,00H,00H,38H,54H,92H,0A2H
+  0B22'   38 54 92      
+  0B25'   A2            
+                        
+  0B26'   A2 4C 00              DB 0A2H,4CH,00H,04H,0BEH,84H,84H
+  0B29'   04 BE 84      
+  0B2C'   84            
+                        
+  0B2D'   9E A4 5C              DB 9EH,0A4H,5CH,00H,08H,4CH,0C6H
+  0B30'   00 08 4C      
+  0B33'   C6            
+                        
+  0B34'   46 44 44              DB 46H,44H,44H,38H,00H,20H,18H
+  0B37'   38 00 20      
+  0B3A'   18            
+                        
+  0B3B'   20 16 8A              DB 20H,16H,8AH,0CAH,18H,00H,00H
+  0B3E'   CA 18 00      
+  0B41'   00            
+                        
+  0B42'   20 70 D8              DB 20H,70H,0D8H,8CH,06H,02H,00H
+  0B45'   8C 06 02      
+  0B48'   00            
+                        
+  0B49'   3E 84 BE              DB 3EH,84H,0BEH,84H,9CH,0A6H,18H
+  0B4C'   84 9C A6      
+  0B4F'   18            
+                        
+  0B50'   00 08 7E              DB 00H,08H,7EH,08H,7EH,38H,4CH
+  0B53'   08 7E 38      
+  0B56'   4C            
+                        
+  0B57'   3A 00 E0              DB 3AH,00H,0E0H,24H,24H,7EH,0A4H
+  0B5A'   24 24 7E      
+  0B5D'   A4            
+                        
+  0B5E'   A4 68 00              DB 0A4H,68H,00H,20H,0FCH,24H,62H
+  0B61'   20 FC 24      
+  0B64'   62            
+                        
+  0B65'   A0 62 3C              DB 0A0H,62H,3CH,00H,04H,44H,7CH
+  0B68'   00 04 44      
+  0B6B'   7C            
+                        
+  0B6C'   C6 AA 92              DB 0C6H,0AAH,92H,64H,00H,20H,20H
+  0B6F'   64 00 20      
+  0B72'   20            
+                        
+  0B73'   78 20 78              DB 78H,20H,78H,22H,1CH,00H,00H
+  0B76'   22 1C 00      
+  0B79'   00            
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-36
+
+
+                        
+  0B7A'   48 FC 4A              DB 48H,0FCH,4AH,42H,4CH,40H,00H
+  0B7D'   42 4C 40      
+  0B80'   00            
+                        
+  0B81'   08 BC CA              DB 08H,0BCH,0CAH,8AH,0BCH,08H,30H
+  0B84'   8A BC 08      
+  0B87'   30            
+                        
+  0B88'   00 08 08              DB 00H,08H,08H,0EH,08H,78H,8CH
+  0B8B'   0E 08 78      
+  0B8E'   8C            
+                        
+  0B8F'   72 00 38              DB 72H,00H,38H,84H,80H,0FCH,0C2H
+  0B92'   84 80 FC      
+  0B95'   C2            
+                        
+  0B96'   02 38 00              DB 02H,38H,00H,00H,42H,42H,42H
+  0B99'   00 42 42      
+  0B9C'   42            
+                        
+  0B9D'   62 04 18              DB 62H,04H,18H,00H,7CH,08H,30H
+  0BA0'   00 7C 08      
+  0BA3'   30            
+                        
+  0BA4'   DC 62 92              DB 0DCH,62H,92H,7CH,00H,20H,2CH
+  0BA7'   7C 00 20      
+  0BAA'   2C            
+                        
+  0BAB'   F4 24 64              DB 0F4H,24H,64H,0E4H,26H,00H,7CH
+  0BAE'   E4 26 00      
+  0BB1'   7C            
+                        
+  0BB2'   18 20 5C              DB 18H,20H,5CH,82H,02H,7CH,00H
+  0BB5'   82 02 7C      
+  0BB8'   00            
+                        
+  0BB9'   40 60 DC              DB 40H,60H,0DCH,62H,42H,0C2H,5CH
+  0BBC'   62 42 C2      
+  0BBF'   5C            
+                        
+  0BC0'   00 10 30              DB 00H,10H,30H,20H,70H,48H,0CEH
+  0BC3'   20 70 48      
+  0BC6'   CE            
+                        
+  0BC7'   84 00 00              DB 84H,00H,00H,00H,00H,00H,00H
+  0BCA'   00 00 00      
+  0BCD'   00            
+                        
+  0BCE'   00 00 00              DB 00H,00H,00H,00H,00H,00H,00H
+  0BD1'   00 00 00      
+  0BD4'   00            
+                        
+  0BD5'   00 00 00              DB 00H,00H,00H,00H
+  0BD8'   00            
+                            ;SUBTTL - MSXINL, Screen editor - Line input and function character
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-37
+
+
+                        
+                        
+                            ;SUBTTL - MSXINL, Screen editor - Process special characters
+                        ;
+                        ;   Constants
+  2000                  GRPDIF  EQU 2000H
+                        ;
+                        ;   Routines
+  2686                  CHRGTR  EQU 2686H
+  73B2                  DIOERR  EQU 73B2H
+  6C48                  FILOU1  EQU 6C48H
+  2689                  GETYPR  EQU 2689H
+  2680                  INIT    EQU 2680H
+  409B                  READYR  EQU 409BH
+  63E6                  STOP    EQU 63E6H
+  2683                  SYNCHR  EQU 2683H
+                        ;
+                        ;   Workspace
+  F40B                  ASCPCT1 EQU 0F40BH
+  F40D                  ASCPCT2 EQU 0F40DH
+  F928                  ATRBAS  EQU 0F928H
+  F3F2                  ATRBYT  EQU 0F3F2H
+  F6AA                  AUTFLG  EQU 0F6AAH
+  F3EA                  BAKCLR  EQU 0F3EAH
+  FBB1                  BASROM  EQU 0FBB1H
+  F3EB                  BDRCLR  EQU 0F3EBH
+  FCB2                  BRDATR  EQU 0FCB2H
+  F55E                  BUF     EQU 0F55EH
+  FC18                  BUFEND  EQU 0FC18H
+  F55D                  BUFMIN  EQU 0F55DH
+  FCAB                  CAPST   EQU 0FCABH
+  F924                  CGPBAS  EQU 0F924H
+  F91F                  CGPNT   EQU 0F91FH
+  FBD9                  CLIKFL  EQU 0FBD9H
+  F3DB                  CLIKSW  EQU 0F3DBH
+  F92A                  CLOC    EQU 0F92AH
+  F38C                  CLPRIM  EQU 0F38CH
+  F92C                  CMASK   EQU 0F92CH
+  F3DE                  CNSDFG  EQU 0F3DEH
+  FBCC                  CODSAV  EQU 0FBCCH
+  F3B1                  CRTCNT  EQU 0F3B1H
+  F942                  CSAVEA  EQU 0F942H
+  F944                  CSAVEM  EQU 0F944H
+  FCA9                  CSRSW   EQU 0FCA9H
+  F3DD                  CSRX    EQU 0F3DDH
+  F3DC                  CSRY    EQU 0F3DCH
+  FCAA                  CSTYLE  EQU 0FCAAH
+  F41C                  CURLIN  EQU 0F41CH
+  FBB0                  ENSTOP  EQU 0FBB0H
+  FCA7                  ESCCNT  EQU 0FCA7H
+  FCC1                  EXPTBL  EQU 0FCC1H
+  FBCE                  FNKFLG  EQU 0FBCEH
+  F87F                  FNKSTR  EQU 0F87FH
+  FBCD                  FNKSWI  EQU 0FBCDH
+  F3E9                  FORCLR  EQU 0F3E9H
+  FBCA                  FSTPOS  EQU 0FBCAH
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-38
+
+
+  F3FA                  GETPNT  EQU 0F3FAH
+  FCB7                  GRPACX  EQU 0FCB7H
+  FCB9                  GRPACY  EQU 0FCB9H
+  F3CD                  GRPATR  EQU 0F3CDH
+  F3CB                  GRPCGP  EQU 0F3CBH
+  F3C9                  GRPCOL  EQU 0F3C9H
+  FCA6                  GRPHED  EQU 0FCA6H
+  F3C7                  GRPNAM  EQU 0F3C7H
+  F3CF                  GRPPAT  EQU 0F3CFH
+  F40A                  HEADER  EQU 0F40AH
+  F408                  HIGH    EQU 0F408H
+  FCA8                  INSFLG  EQU 0FCA8H
+  FCA2                  INTCNT  EQU 0FCA2H
+  FC9B                  INTFLG  EQU 0FC9BH
+  FCA0                  INTVAL  EQU 0FCA0H
+  FC9E                  JIFFY   EQU 0FC9EH
+  FCAD                  KANAMD  EQU 0FCADH
+  FCAC                  KANAST  EQU 0FCACH
+  FBF0                  KEYBUF  EQU 0FBF0H
+  F3AF                  LINL32  EQU 0F3AFH
+  F3AE                  LINL40  EQU 0F3AEH
+  F3B0                  LINLEN  EQU 0F3B0H
+  FBB2                  LINTTB  EQU 0FBB2H
+  F406                  LOW     EQU 0F406H
+  FCA4                  LOWLIM  EQU 0FCA4H
+  F415                  LPTPOS  EQU 0F415H
+  F3D7                  MLTATR  EQU 0F3D7H
+  F3D5                  MLTCGP  EQU 0F3D5H
+  F3D1                  MLTNAM  EQU 0F3D1H
+  F3D9                  MLTPAT  EQU 0F3D9H
+  FB3F                  MUSICF  EQU 0FB3FH
+  F922                  NAMBAS  EQU 0F922H
+  FBE5                  NEWKEY  EQU 0FBE5H
+  F417                  NTMSXP  EQU 0F417H
+  FBDA                  OLDKEY  EQU 0FBDAH
+  FCB0                  OLDSCR  EQU 0FCB0H
+  FBD8                  ONGSBF  EQU 0FBD8H
+  FC9D                  PADX    EQU 0FC9DH
+  FC9C                  PADY    EQU 0FC9CH
+  F926                  PATBAS  EQU 0F926H
+  FC40                  PATWRK  EQU 0FC40H
+  FB40                  PLYCNT  EQU 0FB40H
+  F416                  PRTFLG  EQU 0F416H
+  F864                  PTRFIL  EQU 0F864H
+  F3F8                  PUTPNT  EQU 0F3F8H
+  F971                  QUEBAK  EQU 0F971H
+  FB3E                  QUEUEN  EQU 0FB3EH
+  F3F3                  QUEUES  EQU 0F3F3H
+  F380                  RAMLOW  EQU 0F380H
+  F418                  RAWPRT  EQU 0F418H
+  F380                  RDPRIM  EQU 0F380H
+  F3F7                  REPCNT  EQU 0F3F7H
+  FC6A                  REQSTP  EQU 0FC6AH
+  F3DF                  RG0SAV  EQU 0F3DFH
+  F3E0                  RG1SAV  EQU 0F3E0H
+  F866                  RUNFLG  EQU 0F866H
+	MSX.M-80 1.00	01-Apr-85	PAGE	1-39
+
+
+  F6B1                  SAVSTK  EQU 0F6B1H
+  F3F6                  SCNCNT  EQU 0F3F6H
+  FCAF                  SCRMOD  EQU 0FCAFH
+  FBEB                  SFTKEY  EQU 0FBEBH
+  FCC5                  SLTTBL  EQU 0FCC5H
+  F3E7                  STATFL  EQU 0F3E7H
+  F3C3                  T32ATR  EQU 0F3C3H
+  F3C1                  T32CGP  EQU 0F3C1H
+  F3BF                  T32COL  EQU 0F3BFH
+  F3BD                  T32NAM  EQU 0F3BDH
+  F3C5                  T32PAT  EQU 0F3C5H
+  F3E8                  TRGFLG  EQU 0F3E8H
+  FC4C                  TRPTBL  EQU 0FC4CH
+  F661                  TTYPOS  EQU 0F661H
+  F3B7                  TXTCGP  EQU 0F3B7H
+  F3B3                  TXTNAM  EQU 0F3B3H
+  FB41                  VCBA    EQU 0FB41H
+  FB66                  VCBB    EQU 0FB66H
+  FB8B                  VCBC    EQU 0FB8BH
+  F975                  VOICAQ  EQU 0F975H
+  FB38                  VOICEN  EQU 0FB38H
+  FCA5                  WINWID  EQU 0FCA5H
+  F866                  WORK1   EQU 0F866H
+  F867                  WORK2   EQU 0F867H
+  F869                  WORK3   EQU 0F869H
+  F385                  WRPRIM  EQU 0F385H
+                        ;
+                        ;   Hooks
+  FDC2                  H.CHGE  EQU 0FDC2H
+  FDA4                  H.CHPU  EQU 0FDA4H
+  FDA9                  H.DSPC  EQU 0FDA9H
+  FDB3                  H.DSPF  EQU 0FDB3H
+  FDAE                  H.ERAC  EQU 0FDAEH
+  FDB8                  H.ERAF  EQU 0FDB8H
+  FFAC                  H.FORM  EQU 0FFACH
+  FDC7                  H.INIP  EQU 0FDC7H
+  FDE5                  H.INLI  EQU 0FDE5H
+  FEDF                  H.ISFL  EQU 0FEDFH
+  FDCC                  H.KEYC  EQU 0FDCCH
+  FD9A                  H.KEYI  EQU 0FD9AH
+  FDD1                  H.KYEA  EQU 0FDD1H
+  FFB6                  H.LPTO  EQU 0FFB6H
+  FFBB                  H.LPTS  EQU 0FFBBH
+  FDD6                  H.NMI   EQU 0FDD6H
+  FEE4                  H.OUTD  EQU 0FEE4H
+  FFA7                  H.PHYD  EQU 0FFA7H
+  FDDB                  H.PINL  EQU 0FDDBH
+  FDE0                  H.QINL  EQU 0FDE0H
+  FD9F                  H.TIMI  EQU 0FD9FH
+  FDBD                  H.TOTE  EQU 0FDBDH
+                        
+                                END
+	MSX.M-80 1.00	01-Apr-85	PAGE	S
+
+
+Macros:
+ENDMODULE       EXTRN           MODULE          
+
+Symbols:
+00B0'	ALPJMP          F40B 	ASCPCT1         F40D 	ASCPCT2         
+F928 	ATRBAS          F3F2 	ATRBYT          F6AA 	AUTFLG          
+F3EA 	BAKCLR          FBB1 	BASROM          F3EB 	BDRCLR          
+FCB2 	BRDATR          F55E 	BUF             FC18 	BUFEND          
+F55D 	BUFMIN          FCAB 	CAPST           020A'	CGCAP1          
+F924 	CGPBAS          F91F 	CGPNT           0247'	CGSND1          
+03D9'	CGTABL          0204'	CHGCAP          0241'	CHGSND          
+005E'	CHKBUF          2686 	CHRGTR          023E'	CLICKW          
+FBD9 	CLIKFL          F3DB 	CLIKSW          F92A 	CLOC            
+F38C 	CLPRIM          F92C 	CMASK           F3DE 	CNSDFG          
+FBCC 	CODSAV          F3B1 	CRTCNT          F942 	CSAVEA          
+F944 	CSAVEM          FCA9 	CSRSW           F3DD 	CSRX            
+F3DC 	CSRY            FCAA 	CSTYLE          F41C 	CURLIN          
+73B2 	DIOERR          00EF'	EASYTB          FBB0 	ENSTOP          
+FCA7 	ESCCNT          FCC1 	EXPTBL          6C48 	FILOU1          
+FBCE 	FNKFLG          01BF'	FNKINT          F87F 	FNKSTR          
+FBCD 	FNKSWI          F3E9 	FORCLR          FBCA 	FSTPOS          
+022B'	GENCLK          F3FA 	GETPNT          2689 	GETYPR          
+FCB7 	GRPACX          FCB9 	GRPACY          F3CD 	GRPATR          
+F3CB 	GRPCGP          F3C9 	GRPCOL          2000 	GRPDIF          
+FCA6 	GRPHED          F3C7 	GRPNAM          F3CF 	GRPPAT          
+0359'	GRPTAB          0392'	GTROW8          FDC2 	H.CHGE          
+FDA4 	H.CHPU          FDA9 	H.DSPC          FDB3 	H.DSPF          
+FDAE 	H.ERAC          FDB8 	H.ERAF          FFAC 	H.FORM          
+FDC7 	H.INIP          FDE5 	H.INLI          FEDF 	H.ISFL          
+FDCC 	H.KEYC          FD9A 	H.KEYI          FDD1 	H.KYEA          
+FFB6 	H.LPTO          FFBB 	H.LPTS          FDD6 	H.NMI           
+FEE4 	H.OUTD          FFA7 	H.PHYD          FDDB 	H.PINL          
+FDE0 	H.QINL          FD9F 	H.TIMI          FDBD 	H.TOTE          
+F40A 	HEADER          F408 	HIGH            2680 	INIT            
+FCA8 	INSFLG          FCA2 	INTCNT          FC9B 	INTFLG          
+0021'	INTRET          FCA0 	INTVAL          0000I'	JCKBD@          
+FC9E 	JIFFY           0157'	JPUTCH          025E'	KAIUEO          
+FCAD 	KANAMD          0284'	KANANO          02B4'	KANASF          
+FCAC 	KANAST          02E4'	KANJNO          0314'	KANJSF          
+0066'	KEYANY          FBF0 	KEYBUF          0022'	KEYCHK          
+002C'	KEYCK1          003B'	KEYCK2          0045'	KEYCK3          
+004A'	KEYCK4          0052'	KEYCK5          0117'	KEYCOD          
+0171'	KEYNOM          016F'	KEYSFT          03AF'	KSTKTB          
+00D7'	KY1CNT          00C0'	KY1NOM          00E3'	KY1SFC          
+00CC'	KY1SFT          015A'	KYALP           0074'	KYANY1          
+00B8'	KYC1TB          0137'	KYCLA0          0138'	KYCLAS          
+01CD'	KYCLS           017D'	KYCOD1          01D7'	KYEASY          
+01A1'	KYFNC1          01AC'	KYFNC2          01B6'	KYFNC3          
+0197'	KYFUNC          0344'	KYGRAP          0082'	KYJTAB          
+0266'	KYKAN1          024A'	KYKANA          01E6'	KYKLOK          
+01FD'	KYLOCK          0143'	KYNUM           020D'	KYSTOP          
+0217'	KYSTP1          F3AF 	LINL32          F3AE 	LINL40          
+F3B0 	LINLEN          FBB2 	LINTTB          F406 	LOW             
+FCA4 	LOWLIM          F415 	LPTPOS          F3D7 	MLTATR          
+F3D5 	MLTCGP          F3D1 	MLTNAM          F3D9 	MLTPAT          
+FB3F 	MUSICF          F922 	NAMBAS          FBE5 	NEWKEY          
+	MSX.M-80 1.00	01-Apr-85	PAGE	S-1
+
+
+00A6'	NMSFTB          01FC'	NOKEY           F417 	NTMSXP          
+FBDA 	OLDKEY          FCB0 	OLDSCR          FBD8 	ONGSBF          
+FC9D 	PADX            FC9C 	PADY            F926 	PATBAS          
+FC40 	PATWRK          03D5'	PBDHRT          FB40 	PLYCNT          
+00A8 	PPI.AR          00A8 	PPI.AW          00A9 	PPI.BR          
+00AB 	PPI.CM          00AA 	PPI.CR          00AA 	PPI.CW          
+F416 	PRTFLG          00A2 	PSG.DR          00A1 	PSG.DW          
+00A0 	PSG.LW          000E 	PSG.PA          000F 	PSG.PB          
+F864 	PTRFIL          021C'	PUTCHR          F3F8 	PUTPNT          
+F971 	QUEBAK          FB3E 	QUEUEN          F3F3 	QUEUES          
+F380 	RAMLOW          F418 	RAWPRT          F380 	RDPRIM          
+03BF'	RDVDP           409B 	READYR          F3F7 	REPCNT          
+FC6A 	REQSTP          F3DF 	RG0SAV          F3E0 	RG1SAV          
+03C2'	RSLREG          F866 	RUNFLG          F6B1 	SAVSTK          
+F3F6 	SCNCNT          FCAF 	SCRMOD          FBEB 	SFTKEY          
+FCC5 	SLTTBL          03C8'	SNSMAT          F3E7 	STATFL          
+039F'	STKTBL          63E6 	STOP            2683 	SYNCHR          
+F3C3 	T32ATR          F3C1 	T32CGP          F3BF 	T32COL          
+F3BD 	T32NAM          F3C5 	T32PAT          F3E8 	TRGFLG          
+FC4C 	TRPTBL          F661 	TTYPOS          F3B7 	TXTCGP          
+F3B3 	TXTNAM          0389'	UPDATE          0007 	V.COLR          
+FB41 	VCBA            FB66 	VCBB            FB8B 	VCBC            
+0099 	VDP.CW          0098 	VDP.DRW         0099 	VDP.SR          
+F975 	VOICAQ          FB38 	VOICEN          FCA5 	WINWID          
+F866 	WORK1           F867 	WORK2           F869 	WORK3           
+F385 	WRPRIM          03C5'	WSLREG          
+
+
+
+No Fatal error(s)
+
+
+    F3
